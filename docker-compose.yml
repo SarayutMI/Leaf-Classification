@@ -1,0 +1,25 @@
+services:
+
+  app:
+    build: .
+    ports:
+      - "${PORT:-8000}:${PORT:-8000}"
+    env_file:
+      - .env
+    environment:
+      - YOLO_CONFIG_DIR=/tmp
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - model_leaf:/app/Model-Leaf
+      - model_classification:/app/Model_Classification
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${PORT:-8000}/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 180s
+    restart: unless-stopped
+
+volumes:
+  model_leaf:
+  model_classification:

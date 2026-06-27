@@ -1,0 +1,15 @@
+.venv/
+.env
+__pycache__/
+*.py[cod]
+*.pt
+*.keras
+*.h5
+.git/
+docs/
+tests/
+Etc/
+Testset-Shape-Shadow-output/
+"Image for Example"/
+Input-Image/
+.DS_Store
