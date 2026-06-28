@@ -1,0 +1,11 @@
+workflow-aggregator:latest
+git:latest
+github:latest
+github-branch-source:latest
+docker-workflow:latest
+hashicorp-vault-plugin:latest
+credentials:latest
+credentials-binding:latest
+configuration-as-code:latest
+pipeline-stage-view:latest
+ws-cleanup:latest

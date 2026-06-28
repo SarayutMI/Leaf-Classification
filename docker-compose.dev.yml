@@ -1,0 +1,7 @@
+services:
+  app:
+    container_name: leaf-api-dev
+    ports:
+      - "15780:8000"
+    environment:
+      - APP_ENV=development
