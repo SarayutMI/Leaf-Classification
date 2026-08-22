@@ -9,12 +9,20 @@ from fastapi import APIRouter, BackgroundTasks, File, UploadFile, Depends, Reque
 from fastapi.responses import JSONResponse, RedirectResponse
 from src.auth.dependencies import require_api_key
 from src.classify import repository, service, storage
+# Bound directly rather than reached through `service`: it is a pure lookup with
+# no model behind it, so tests that mock the service module still get real Thai
+# names instead of a MagicMock the JSON encoder cannot serialize.
+from src.classify.service import mapping_predict_thai_name
 from src.config import settings
 
 router = APIRouter(tags=["classify"])
 logger = logging.getLogger(__name__)
 
 MAX_IMAGE_BYTES = 10 * 1024 * 1024  # 10 MB
+RETRY_AFTER_SECONDS = 5
+
+# Classifications currently being processed; see the 429 guard in classify().
+_inflight = 0
 
 
 def _log(api_key, ip, filename, http_status, status,
@@ -72,6 +80,26 @@ async def classify(
     filename = image.filename or "unknown"
     loop = asyncio.get_running_loop()
     started_at = time.perf_counter()
+
+    # Shed load before doing any work. `_inflight` is only read and written
+    # between awaits, so the event loop cannot interleave another request here.
+    global _inflight
+    if _inflight >= settings.MAX_CONCURRENT_CLASSIFY:
+        background_tasks.add_task(_log, api_key, ip, filename, 429, "error", "Server busy")
+        return JSONResponse(
+            status_code=429,
+            headers={"Retry-After": str(RETRY_AFTER_SECONDS)},
+            content={
+                "code": 429,
+                "status": "error",
+                "message": "Server busy — too many classifications in progress",
+                "errors": {
+                    "type": "RATE_LIMIT",
+                    "details": f"At most {settings.MAX_CONCURRENT_CLASSIFY} images are processed at a time. Retry in {RETRY_AFTER_SECONDS}s.",
+                },
+            },
+        )
+    _inflight += 1
 
     try:
         file_bytes = await image.read()
@@ -153,6 +181,10 @@ async def classify(
                     "apex":   apex_label,
                     "base":   base_label,
                     "margin": margin_label,
+                    "shape_th":  mapping_predict_thai_name("shape",  shape_label),
+                    "apex_th":   mapping_predict_thai_name("apex",   apex_label),
+                    "base_th":   mapping_predict_thai_name("base",   base_label),
+                    "margin_th": mapping_predict_thai_name("margin", margin_label),
                     "prediction": {"label": None, "confidence": overall_conf},
                 },
             },
@@ -171,3 +203,6 @@ async def classify(
                 "errors": {"type": "PROCESSING_ERROR", "details": "Contact support if this persists."},
             },
         )
+
+    finally:
+        _inflight -= 1

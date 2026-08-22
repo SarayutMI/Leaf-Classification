@@ -62,14 +62,28 @@ class Settings(BaseSettings):
 
     # ── Detection ─────────────────────────────────────────────────
     TARGET_CLASS: str = "leaf"
+    # Longest side YOLO letterboxes the input to. Detection cost scales with
+    # this, not with the uploaded resolution. Must match the imgsz baked into
+    # the OpenVINO export (see scripts/export_openvino.py).
+    YOLO_IMGSZ: int = 640
     ASPECT_W: int = 4
     ASPECT_H: int = 3
     IMG_SIZE: int = 256
+
+    # ── Load shedding ─────────────────────────────────────────────
+    # Classification is serialized (one YOLO instance, non-thread-safe TFLite
+    # interpreters), so extra concurrent callers only queue. Past this many
+    # in flight the API returns 429 instead of letting clients time out.
+    MAX_CONCURRENT_CLASSIFY: int = 4
+    # Seconds a successful /health database ping stays cached, so a 30s
+    # container healthcheck does not open a cross-network connection each time.
+    HEALTH_DB_CACHE_SECONDS: float = 10.0
 
     # ── CPU tuning ────────────────────────────────────────────────
     # Match the deploy target (VPS: 2 cores). Used for TF thread pools
     # and TFLite interpreters.
     NUM_THREADS: int = 2
+
 
 @lru_cache
 def get_settings() -> Settings:

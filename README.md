@@ -5,6 +5,33 @@
 ## Overview
 
 
+## Input contract — leaf orientation
+
+**The leaf must be photographed upright with its tip (apex) pointing DOWN and
+the stalk (petiole) up.** This is not a preference; it is what the classifiers
+were trained on.
+
+`slice_leaf()` cuts the crop at fixed fractions of image height and hands each
+band to a different model:
+
+| band | fraction of height | model |
+|---|---|---|
+| top | 0 – 30% | `R50_Apex` |
+| middle | 30 – 60% | `R50_Margin` |
+| *(gap)* | 60 – 70% | *(unused — transition zone)* |
+| bottom | 70 – 100% | `R50_Base` |
+
+These bounds come from `Etc/Extractimage-Test-Process.py`, the script that
+produced the training crops from the `Testset-*-Shadow-output` photos. A leaf
+that arrives sideways or flipped gives every head a region it never saw in
+training, and the API answers with confident, wrong labels — it cannot detect
+that anything is off.
+
+The API does **not** correct orientation, deliberately. Guessing wrong destroys
+framing that was already correct, and nothing in these photos settles it: the
+petiole — the one botanically reliable marker of the base — is cut off before
+the leaf is photographed. Enforce the framing in the client instead.
+
 ## Quick start
 
 ```bash
