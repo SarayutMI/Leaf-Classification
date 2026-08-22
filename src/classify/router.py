@@ -169,10 +169,12 @@ async def classify(
                 probs={"shape": shape_conf / 100, "apex": apex_conf / 100,
                        "base": base_conf / 100, "margin": margin_conf / 100},
             )
-            prediction_label = top_groups[0]["name"] if top_groups else None
+            best = top_groups[0] if top_groups else None
         except Exception:
             logger.exception("Rule matching failed — returning no group label")
-            prediction_label = None
+            best = None
+
+        prediction_label = best["name"] if best else None
 
         duration = round(time.perf_counter() - started_at, 3)
 
@@ -203,7 +205,13 @@ async def classify(
                     "apex_th":   mapping_predict_thai_name("apex",   apex_label),
                     "base_th":   mapping_predict_thai_name("base",   base_label),
                     "margin_th": mapping_predict_thai_name("margin", margin_label),
-                    "prediction": {"label": prediction_label, "confidence": overall_conf},
+                    # group_id/code let the caller fetch the group's varieties.
+                    "prediction": {
+                        "group_id":   best["id"] if best else None,
+                        "code":       best["code"] if best else None,
+                        "label":      prediction_label,
+                        "confidence": overall_conf,
+                    },
                 },
             },
         )

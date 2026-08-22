@@ -42,6 +42,7 @@
 
   <nav class="tabs">
     <button class="tab active" data-tab="rules">กฎการจำแนก</button>
+    <button class="tab" data-tab="varieties">ชนิดมัน</button>
     <button class="tab" data-tab="test">ทดสอบ</button>
   </nav>
 
@@ -51,6 +52,12 @@
   <div id="tab-rules" class="tab-panel">
     <div class="toolbar">
       <button id="new-rule-btn" class="primary">+ เพิ่มกลุ่มใหม่</button>
+      <div class="filters">
+        <input type="search" id="rules-search" class="search"
+               placeholder="ค้นหา code, ชื่อกลุ่ม หรือลักษณะ…"
+               autocomplete="off" aria-label="ค้นหากฎการจำแนก">
+        <button type="button" id="rules-clear" class="ghost hidden">ล้าง</button>
+      </div>
       <span id="rules-count" class="muted"></span>
     </div>
 
@@ -64,6 +71,7 @@
             <th>Apex</th>
             <th>Base</th>
             <th>Margin</th>
+            <th>ชนิดมัน</th>
             <th>Active</th>
             <th>Action</th>
           </tr>
@@ -74,6 +82,41 @@
         <span class="spinner" aria-hidden="true"></span> กำลังโหลดกฎ…
       </p>
       <p id="rules-empty" class="state muted hidden">ยังไม่มีกฎ — กด “เพิ่มกลุ่มใหม่” เพื่อเริ่ม</p>
+      <p id="rules-no-match" class="state muted hidden">ไม่พบกฎที่ตรงกับคำค้น</p>
+    </div>
+  </div>
+
+  <!-- Varieties tab -->
+  <div id="tab-varieties" class="tab-panel hidden">
+    <div class="toolbar">
+      <button id="new-variety-btn" class="primary">+ เพิ่มชนิดมัน</button>
+      <div class="filters">
+        <input type="search" id="varieties-search" class="search"
+               placeholder="ค้นหาชื่อชนิดมัน…"
+               autocomplete="off" aria-label="ค้นหาชนิดมัน">
+        <select id="varieties-group-filter" aria-label="กรองตามกลุ่ม"></select>
+        <button type="button" id="varieties-clear" class="ghost hidden">ล้าง</button>
+      </div>
+      <span id="varieties-count" class="muted"></span>
+    </div>
+
+    <div class="table-wrap" id="varieties-table-wrap">
+      <table id="varieties-table">
+        <thead>
+          <tr>
+            <th>ชื่อ</th>
+            <th>กลุ่ม</th>
+            <th>Active</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody id="varieties-tbody"></tbody>
+      </table>
+      <p id="varieties-loading" class="state hidden">
+        <span class="spinner" aria-hidden="true"></span> กำลังโหลดชนิดมัน…
+      </p>
+      <p id="varieties-empty" class="state muted hidden">ยังไม่มีชนิดมัน — กด “เพิ่มชนิดมัน” เพื่อเริ่ม</p>
+      <p id="varieties-no-match" class="state muted hidden">ไม่พบชนิดมันที่ตรงกับเงื่อนไข</p>
     </div>
   </div>
 
@@ -175,6 +218,48 @@
     <div class="modal-actions">
       <button type="button" id="editor-cancel" class="ghost">ยกเลิก</button>
       <button type="submit" class="primary" id="editor-submit">บันทึก</button>
+    </div>
+  </form>
+</div>
+
+<!-- ── Variety editor ────────────────────────────────────── -->
+<div id="variety-backdrop" class="backdrop hidden">
+  <form id="variety-form" class="card modal">
+    <h2 id="variety-title">เพิ่มชนิดมัน</h2>
+
+    <details class="help">
+      <summary>ชนิดมันคืออะไร?</summary>
+      <p>
+        ชื่อพันธุ์มันที่อยู่ใต้กลุ่มการจำแนก เช่น <b>มันเสือ</b> อยู่ในกลุ่ม G1
+        หนึ่งชนิดอยู่ได้<b>กลุ่มเดียว</b> และชื่อห้ามซ้ำกับชนิดอื่นในระบบ
+      </p>
+      <p>
+        ชนิดมันไม่มีผลต่อการให้คะแนน — <code>/api/classify</code> คืนแค่ id กับชื่อกลุ่ม
+        ปลายทางเอา id ไปดึงรายชื่อชนิดมันเอง กลุ่มที่ยังไม่มีชนิดมันก็จำแนกได้ตามปกติ
+      </p>
+    </details>
+
+    <input type="hidden" id="variety-id">
+
+    <label>กลุ่ม
+      <select id="variety-group" required></select>
+      <span class="hint">ทุกชื่อที่เพิ่มในครั้งนี้จะเข้ากลุ่มนี้ทั้งหมด</span>
+      <span class="field-error hidden" data-error-for="group_id"></span>
+    </label>
+
+    <p class="section-note" id="variety-names-note">
+      ใส่ได้หลายชื่อพร้อมกัน — กด “+ เพิ่มชื่อ” เพื่อเพิ่มบรรทัด ชื่อที่ผิดจะฟ้องใต้บรรทัดนั้น
+    </p>
+
+    <div id="variety-names" class="name-rows"></div>
+
+    <button type="button" id="add-name-row" class="ghost">+ เพิ่มชื่อ</button>
+
+    <p id="variety-error" class="error hidden"></p>
+
+    <div class="modal-actions">
+      <button type="button" id="variety-cancel" class="ghost">ยกเลิก</button>
+      <button type="submit" class="primary" id="variety-submit">บันทึก</button>
     </div>
   </form>
 </div>

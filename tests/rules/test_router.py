@@ -32,11 +32,10 @@ def _secret(monkeypatch):
 
 @pytest.fixture
 def client():
-    """Authenticated client — carries a valid session cookie."""
+    """Authenticated client — carries a valid Bearer token."""
     c = TestClient(app, raise_server_exceptions=False)
-    c.cookies.set(
-        settings.SESSION_COOKIE_NAME, security.create_access_token(1, "admin")
-    )
+    token = security.create_access_token("uuid-1", "admin", "admin")
+    c.headers["Authorization"] = f"Bearer {token}"
     return c
 
 
@@ -53,24 +52,38 @@ def _declared_routes():
     """
     for route in router.routes:
         for method in sorted(route.methods - {"HEAD", "OPTIONS"}):
-            yield method, route.path.replace("{group_id}", "1")
+            yield method, route.path
 
 
 @pytest.mark.parametrize("method,path", list(_declared_routes()))
 def test_every_route_requires_a_session(anonymous, method, path):
     # request() rather than get()/post(): only the body-carrying verbs accept
     # json=, and the auth check has to happen before body validation anyway.
-    response = anonymous.request(method, path, json={})
+    response = anonymous.request(
+        method, path.replace("{variety_id}", "1"), json={}
+    )
     assert response.status_code == 401
 
 
-def test_list_returns_groups(client):
+def test_list_returns_groups_with_a_variety_count(client):
     with patch("src.rules.router.repository") as mock_repo:
-        mock_repo.list_groups.return_value = [GROUP]
+        mock_repo.list_groups.return_value = [dict(GROUP)]
+        mock_repo.variety_counts_by_group.return_value = {1: 2}
         response = client.get("/api/rules")
 
     assert response.status_code == 200
-    assert response.json()["data"]["groups"][0]["code"] == "G1"
+    group = response.json()["data"]["groups"][0]
+    assert group["code"] == "G1"
+    assert group["variety_count"] == 2
+
+
+def test_a_group_with_no_varieties_counts_zero(client):
+    with patch("src.rules.router.repository") as mock_repo:
+        mock_repo.list_groups.return_value = [dict(GROUP)]
+        mock_repo.variety_counts_by_group.return_value = {}
+        response = client.get("/api/rules")
+
+    assert response.json()["data"]["groups"][0]["variety_count"] == 0
 
 
 def test_vocab_lists_the_configured_classes(client):
@@ -217,9 +230,11 @@ def test_test_endpoint_returns_scored_groups(client):
 def test_responses_are_not_cacheable(client):
     """A browser must not replay an authenticated 200 after logout."""
     with patch("src.rules.router.repository") as mock_repo:
-        mock_repo.list_groups.return_value = [GROUP]
+        mock_repo.list_groups.return_value = [dict(GROUP)]
+        mock_repo.variety_counts_by_group.return_value = {}
         response = client.get("/api/rules")
 
+    assert response.status_code == 200
     assert "no-store" in response.headers["cache-control"]
 
 

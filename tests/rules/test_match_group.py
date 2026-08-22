@@ -4,14 +4,25 @@ these never touch the database."""
 from src.rules.service import match_group
 
 
+_next_id = iter(range(1, 1000))
+
+
 def _rule(code, name="กลุ่ม", shape="Cordate", apex="Acute",
           base="Auriculate", margin="Entire"):
-    return {"code": code, "name": name, "shape": shape, "apex": apex,
-            "base": base, "margin": margin}
+    return {"id": next(_next_id), "code": code, "name": name, "shape": shape,
+            "apex": apex, "base": base, "margin": margin}
 
 
 PREDICTED = {"shape": "Cordate", "apex": "Acute", "base": "Auriculate", "margin": "Entire"}
 CONFIDENT = {"shape": 0.9, "apex": 0.9, "base": 0.9, "margin": 0.9}
+
+
+def test_results_carry_the_group_id():
+    """The classify route returns it so callers can fetch the varieties."""
+    rule = _rule("G1")
+    results = match_group(PREDICTED, CONFIDENT, rules=[rule])
+
+    assert results[0]["id"] == rule["id"]
 
 
 def test_exact_match_wins():

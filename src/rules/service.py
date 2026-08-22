@@ -95,6 +95,7 @@ def match_group(
                 score += float(probs.get(key, 0.0))
 
         results.append({
+            "id": rule["id"],
             "code": rule["code"],
             "name": rule["name"],
             "matched": round(matched, 2),

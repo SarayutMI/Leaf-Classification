@@ -57,3 +57,36 @@ class RuleTestRequest(BaseModel):
     probs: dict[str, float] = Field(default_factory=dict)
     conf_th: float = Field(default=0.6, ge=0.0, le=1.0)
     top_n: int = Field(default=3, ge=1, le=20)
+
+
+class VarietyItemIn(BaseModel):
+    """One name in a batch. `name` is checked for emptiness and duplicates by
+    the router, which can report the offending index."""
+    name: str = Field(max_length=255)
+    is_active: bool = True
+
+    @field_validator("name")
+    @classmethod
+    def _strip_name(cls, v: str) -> str:
+        return v.strip()
+
+
+class VarietyBatchIn(BaseModel):
+    """Several varieties added to one group at once."""
+    group_id: int
+    items: list[VarietyItemIn] = Field(min_length=1, max_length=100)
+
+
+class VarietyIn(BaseModel):
+    """A single variety, for the edit form."""
+    group_id: int
+    name: str = Field(max_length=255)
+    is_active: bool = True
+
+    @field_validator("name")
+    @classmethod
+    def _strip_name(cls, v: str) -> str:
+        return v.strip()
+
+    def to_row(self) -> dict:
+        return self.model_dump()

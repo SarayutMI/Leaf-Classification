@@ -77,6 +77,81 @@ def _migrate_rule_traits(cursor) -> None:
     )
 
 
+def _ensure_foreign_key(cursor, table: str, column: str, ddl: str) -> None:
+    """Add a foreign key on `column` if the table has none. Idempotent."""
+    cursor.execute(
+        "SELECT COUNT(*) FROM information_schema.key_column_usage "
+        "WHERE table_schema = %s AND table_name = %s AND column_name = %s "
+        "AND referenced_table_name IS NOT NULL",
+        (settings.DB_NAME, table, column),
+    )
+    if cursor.fetchone()[0] == 0:
+        cursor.execute(f"ALTER TABLE {table} ADD {ddl}")
+
+
+def _migrate_variety_groups(cursor) -> None:
+    """Fold the short-lived many-to-many variety link into a group_id column.
+
+    Varieties briefly allowed several groups each. They now belong to exactly
+    one, so the link table is folded in — a variety in more than one group keeps
+    the lowest group id — and dropped only once it is empty.
+    """
+    if not _table_exists(cursor, "classify_rule_variety_group"):
+        # The link table is already gone, but a database migrated by an earlier
+        # build can still be left with a nullable, unconstrained group_id.
+        _tighten_variety_group_id(cursor)
+        return
+
+    _ensure_column(cursor, "classify_rule_variety", "group_id", "INT NULL")
+
+    cursor.execute("""
+        UPDATE classify_rule_variety v
+          JOIN (SELECT variety_id, MIN(group_id) AS group_id
+                  FROM classify_rule_variety_group
+              GROUP BY variety_id) l ON l.variety_id = v.id
+           SET v.group_id = l.group_id
+         WHERE v.group_id IS NULL
+    """)
+    if cursor.rowcount:
+        print(f"Migrated {cursor.rowcount} variety group link(s)")
+
+    cursor.execute("DELETE FROM classify_rule_variety WHERE group_id IS NULL")
+    if cursor.rowcount:
+        print(f"Removed {cursor.rowcount} variety row(s) with no group")
+
+    cursor.execute("SELECT COUNT(*) FROM classify_rule_variety_group")
+    if cursor.fetchone()[0] == 0:
+        cursor.execute("DROP TABLE classify_rule_variety_group")
+        print("Dropped classify_rule_variety_group (empty)")
+    else:
+        # Never drop rows that were not carried over — say so instead.
+        print("classify_rule_variety_group still has rows; left in place")
+
+    _tighten_variety_group_id(cursor)
+
+
+def _tighten_variety_group_id(cursor) -> None:
+    """Bring a migrated classify_rule_variety in line with a freshly created one.
+
+    _ensure_column can only add group_id as nullable, and adds no constraint, so
+    a database that went through the migration would otherwise keep a weaker
+    schema than one built from the CREATE TABLE above. Every remaining row has a
+    group by this point, so both changes are safe.
+    """
+    cursor.execute("SELECT COUNT(*) FROM classify_rule_variety WHERE group_id IS NULL")
+    if cursor.fetchone()[0]:
+        print("classify_rule_variety still has rows without a group; leaving schema as is")
+        return
+
+    cursor.execute("ALTER TABLE classify_rule_variety MODIFY group_id INT NOT NULL")
+    _ensure_foreign_key(
+        cursor,
+        "classify_rule_variety",
+        "group_id",
+        "FOREIGN KEY (group_id) REFERENCES classify_rule_group(id) ON DELETE CASCADE",
+    )
+
+
 def run():
     conn = mysql.connector.connect(
         host=settings.DB_HOST,
@@ -156,7 +231,23 @@ def run():
         )
     """)
 
+    # Named yam varieties under a rule group. One variety belongs to exactly
+    # one group, so the group is a column here, not a link table.
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS classify_rule_variety (
+            id         INT AUTO_INCREMENT PRIMARY KEY,
+            group_id   INT          NOT NULL,
+            name       VARCHAR(255) NOT NULL UNIQUE COMMENT 'e.g. มันเสือ',
+            is_active  TINYINT(1)   NOT NULL DEFAULT 1,
+            created_at DATETIME     DEFAULT NOW(),
+            updated_at DATETIME     DEFAULT NOW() ON UPDATE NOW(),
+            KEY idx_variety_group (group_id),
+            FOREIGN KEY (group_id) REFERENCES classify_rule_group(id) ON DELETE CASCADE
+        )
+    """)
+
     _migrate_rule_traits(cursor)
+    _migrate_variety_groups(cursor)
 
     # Databases created before these columns existed still need them: the
     # CREATE TABLE above is a no-op once the table exists, and

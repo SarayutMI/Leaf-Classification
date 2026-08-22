@@ -3,8 +3,9 @@ import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
-from fastapi.responses import RedirectResponse
+from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from src.auth.router import router as auth_router
 from src.classify.router import router as classify_router
@@ -55,6 +56,38 @@ app.include_router(rules_router)
 # Rule-base admin page. Same origin as the API, so the session cookie rides
 # along and no CORS configuration is needed.
 app.mount("/admin", StaticFiles(directory=str(STATIC_DIR), html=True), name="admin")
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_error_handler(request: Request, exc: RequestValidationError):
+    """Report request-shape errors in this API's own envelope, by index.
+
+    FastAPI's default 422 is a flat `detail` list whose `loc` path the caller
+    has to parse. The variety form submits many rows at once, so each error
+    names the row `index` (null when the field is not inside a list) and the
+    `field`, matching what the routes' own semantic checks return.
+    """
+    fields = []
+    for error in exc.errors():
+        # loc looks like ("body", "items", 0, "name") — the int is the row.
+        location = [part for part in error["loc"] if part != "body"]
+        index = next((part for part in location if isinstance(part, int)), None)
+        names = [part for part in location if isinstance(part, str)]
+        fields.append({
+            "index": index,
+            "field": names[-1] if names else None,
+            "message": error["msg"],
+        })
+
+    return JSONResponse(
+        status_code=422,
+        content={
+            "code": 422,
+            "status": "error",
+            "message": "Validation failed",
+            "errors": {"type": "VALIDATION_ERROR", "fields": fields},
+        },
+    )
 
 
 @app.get("/", include_in_schema=False)

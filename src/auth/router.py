@@ -5,13 +5,21 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 
 from src.auth import repository as auth_repository, security, service
-from src.auth.dependencies import require_session
+from src.auth.dependencies import NO_STORE, require_session
 from src.auth.exceptions import InvalidCredentials
 from src.auth.schemas import AdminLoginRequest, GenTokenRequest
 from src.config import settings
 
 router = APIRouter(prefix="/api", tags=["auth"])
 logger = logging.getLogger(__name__)
+
+
+def _invalid_credentials() -> JSONResponse:
+    return JSONResponse(
+        status_code=401,
+        content={"code": 401, "status": "error", "message": "Invalid credentials"},
+        headers=NO_STORE,
+    )
 
 
 @router.post("/genToken")
@@ -38,14 +46,17 @@ async def gen_token(body: GenTokenRequest):
 
 @router.post("/admin/login")
 async def admin_login(body: AdminLoginRequest):
-    """Log in to the rule-base admin page.
+    """Log in to the rule-base admin API.
 
-    Deliberately does NOT go through service.get_or_create_api_key, which
-    registers unknown usernames on first use — acceptable when handing out an
-    API key, not acceptable for an admin login.
+    Credentials come from the platform's `users` table, not this service's
+    classify_user (which still backs /api/genToken). Only an active admin gets
+    a token.
+
+    Every rejection returns the same 401 body: telling a caller which admin
+    usernames exist, or which are disabled, is free reconnaissance.
     """
     try:
-        user = auth_repository.get_user_by_username(body.username)
+        user = auth_repository.get_admin_user_by_username(body.username)
     except Exception:
         logger.exception("Admin login failed to read user")
         return JSONResponse(
@@ -53,41 +64,58 @@ async def admin_login(body: AdminLoginRequest):
             content={"code": 500, "status": "error", "message": "Database error"},
         )
 
-    if not user or not security.verify_password(body.password, user["password_hash"]):
-        return JSONResponse(
-            status_code=401,
-            content={"code": 401, "status": "error", "message": "Invalid credentials"},
-        )
+    if not user:
+        return _invalid_credentials()
 
-    token = security.create_access_token(user["id"], user["username"])
-    response = JSONResponse(
+    if not security.verify_password(body.password, user["password"]):
+        return _invalid_credentials()
+
+    if user["role"] != "admin":
+        logger.warning("Admin login refused for non-admin user %r", body.username)
+        return _invalid_credentials()
+
+    if not user["is_active"]:
+        logger.warning("Admin login refused for disabled user %r", body.username)
+        return _invalid_credentials()
+
+    token = security.create_access_token(user["id"], user["username"], user["role"])
+    return JSONResponse(
         status_code=200,
         content={
             "code": 200,
             "status": "success",
-            "data": {"username": user["username"]},
+            "data": {
+                "access_token": token,
+                "token_type": "bearer",
+                "expires_in": settings.JWT_EXPIRE_MINUTES * 60,
+                "user": {
+                    "id": str(user["id"]),
+                    "username": user["username"],
+                    "name": user["name"],
+                    "role": user["role"],
+                },
+            },
         },
+        headers=NO_STORE,
     )
-    response.set_cookie(
-        key=settings.SESSION_COOKIE_NAME,
-        value=token,
-        max_age=settings.JWT_EXPIRE_MINUTES * 60,
-        httponly=True,
-        samesite="lax",
-        secure=settings.COOKIE_SECURE,
-        path="/",
-    )
-    return response
 
 
 @router.post("/admin/logout")
 async def admin_logout():
-    response = JSONResponse(
+    """No server-side session exists to end — the client discards its token.
+
+    Kept as an endpoint so the page has one call to make and the API shape does
+    not change. A token stays valid until it expires; there is no revocation.
+    """
+    return JSONResponse(
         status_code=200,
-        content={"code": 200, "status": "success", "message": "Logged out"},
+        content={
+            "code": 200,
+            "status": "success",
+            "message": "Discard the access token on the client",
+        },
+        headers=NO_STORE,
     )
-    response.delete_cookie(key=settings.SESSION_COOKIE_NAME, path="/")
-    return response
 
 
 @router.get("/admin/me")
@@ -97,8 +125,11 @@ async def admin_me(session: dict = Depends(require_session)):
         content={
             "code": 200,
             "status": "success",
-            "data": {"username": session.get("username")},
+            "data": {
+                "id": session.get("sub"),
+                "username": session.get("username"),
+                "role": session.get("role"),
+            },
         },
-        # Never let a browser replay this from cache after logout.
-        headers={"Cache-Control": "no-store, private", "Pragma": "no-cache"},
+        headers=NO_STORE,
     )

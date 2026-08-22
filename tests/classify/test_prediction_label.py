@@ -50,12 +50,16 @@ def _classify(jpeg_bytes, match_group_result=None, match_group_error=None):
 
 def test_best_group_becomes_the_prediction_label(jpeg_bytes):
     response, _, mock_repo = _classify(jpeg_bytes, [
-        {"code": "G1", "name": "กลุ่มใบหัวใจ", "matched": 4, "score": 3.5},
-        {"code": "G2", "name": "กลุ่มใบไข่", "matched": 2, "score": 1.0},
+        {"id": 1, "code": "G1", "name": "กลุ่มใบหัวใจ", "matched": 4, "score": 3.5},
+        {"id": 2, "code": "G2", "name": "กลุ่มใบไข่", "matched": 2, "score": 1.0},
     ])
 
     assert response.status_code == 200
-    assert response.json()["data"]["prediction"]["label"] == "กลุ่มใบหัวใจ"
+    prediction = response.json()["data"]["prediction"]
+    # group_id and code let the caller fetch the group's varieties.
+    assert prediction == {
+        "group_id": 1, "code": "G1", "label": "กลุ่มใบหัวใจ", "confidence": 75.0,
+    }
     assert mock_repo.log_api_call.call_args.kwargs["prediction_label"] == "กลุ่มใบหัวใจ"
 
 
@@ -69,11 +73,14 @@ def test_probabilities_are_passed_as_fractions_not_percentages(jpeg_bytes):
     }
 
 
-def test_empty_rule_base_yields_a_null_label(jpeg_bytes):
+def test_empty_rule_base_yields_a_null_group(jpeg_bytes):
     response, _, _ = _classify(jpeg_bytes, [])
 
     assert response.status_code == 200
-    assert response.json()["data"]["prediction"]["label"] is None
+    prediction = response.json()["data"]["prediction"]
+    assert prediction["label"] is None
+    assert prediction["group_id"] is None
+    assert prediction["code"] is None
 
 
 def test_rule_failure_does_not_break_the_classification(jpeg_bytes):
@@ -83,5 +90,6 @@ def test_rule_failure_does_not_break_the_classification(jpeg_bytes):
     assert response.status_code == 200
     data = response.json()["data"]
     assert data["prediction"]["label"] is None
+    assert data["prediction"]["group_id"] is None
     # The trait predictions still come back.
     assert data["shape"] == "Cordate"
