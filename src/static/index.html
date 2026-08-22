@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Rule Base — Leaf Classification</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ── Boot splash: shown until /api/admin/me answers ─────── -->
+<section id="boot-view" class="boot-view">
+  <span class="spinner big" aria-hidden="true"></span>
+  <p class="muted">กำลังโหลด…</p>
+</section>
+
+<!-- ── Login ─────────────────────────────────────────────── -->
+<section id="login-view" class="login-view hidden">
+  <form id="login-form" class="card login-card">
+    <h1>Rule Base</h1>
+    <p class="muted">เข้าสู่ระบบเพื่อจัดการกฎการจำแนกใบมัน</p>
+    <label>Username
+      <input type="text" id="login-username" autocomplete="username" required>
+    </label>
+    <label>Password
+      <input type="password" id="login-password" autocomplete="current-password" required>
+    </label>
+    <p id="login-error" class="error hidden"></p>
+    <button type="submit" class="primary" id="login-submit">เข้าสู่ระบบ</button>
+  </form>
+</section>
+
+<!-- ── App ───────────────────────────────────────────────── -->
+<section id="app-view" class="hidden">
+  <header class="topbar">
+    <h1>Rule Base <span class="muted">— Yam Leaf Classification</span></h1>
+    <div class="topbar-right">
+      <span id="current-user" class="muted"></span>
+      <button id="logout-btn" class="ghost">ออกจากระบบ</button>
+    </div>
+  </header>
+
+  <nav class="tabs">
+    <button class="tab active" data-tab="rules">กฎการจำแนก</button>
+    <button class="tab" data-tab="test">ทดสอบ</button>
+  </nav>
+
+  <p id="flash" class="flash hidden"></p>
+
+  <!-- Rules tab -->
+  <div id="tab-rules" class="tab-panel">
+    <div class="toolbar">
+      <button id="new-rule-btn" class="primary">+ เพิ่มกลุ่มใหม่</button>
+      <span id="rules-count" class="muted"></span>
+    </div>
+
+    <div class="table-wrap" id="rules-table-wrap">
+      <table id="rules-table">
+        <thead>
+          <tr>
+            <th>Code</th>
+            <th>ชื่อกลุ่ม</th>
+            <th>Shape</th>
+            <th>Apex</th>
+            <th>Base</th>
+            <th>Margin</th>
+            <th>Active</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody id="rules-tbody"></tbody>
+      </table>
+      <p id="rules-loading" class="state hidden">
+        <span class="spinner" aria-hidden="true"></span> กำลังโหลดกฎ…
+      </p>
+      <p id="rules-empty" class="state muted hidden">ยังไม่มีกฎ — กด “เพิ่มกลุ่มใหม่” เพื่อเริ่ม</p>
+    </div>
+  </div>
+
+  <!-- Test tab -->
+  <div id="tab-test" class="tab-panel hidden">
+    <div class="card">
+      <h2>ทดสอบการให้คะแนน</h2>
+      <p class="muted">
+        กรอกลักษณะที่โมเดลทำนาย พร้อมความมั่นใจ แล้วดูว่ากฎกลุ่มไหนได้คะแนนสูงสุด 3 อันดับ
+        — เหมือนที่ <code>/api/classify</code> ทำจริงทุกครั้งที่มีรูปเข้ามา
+      </p>
+
+      <details class="help">
+        <summary>จัดอันดับยังไง?</summary>
+        <p>
+          เรียงด้วย <b>Matched</b> ก่อน — นับว่าตรงกี่ช่องจาก 4 ช่อง เสมอกันค่อยใช้ <b>Score</b> ตัดสิน
+          (Score = ผลรวมความมั่นใจของช่องที่ตรง)
+        </p>
+        <p>
+          ที่ threshold 0.6 ตามค่าจริงในระบบ สองวิธีนี้ให้ผลเหมือนกันเสมอ
+          (ช่องที่ตรงบวกอย่างน้อย 0.6 อยู่แล้ว ตรงมากกว่าจึงคะแนนมากกว่าเสมอ)
+          จะต่างกันก็ต่อเมื่อลด threshold ลงมาต่ำ ๆ ในหน้านี้ — เรียงด้วย Matched ก่อนเพื่อให้ผลตรงกับที่คาดเสมอ
+        </p>
+        <ul>
+          <li>ช่องที่ <b>ตรงกับกฎ</b> และมั่นใจพอ → Matched +1, Score + ค่าความมั่นใจ</li>
+          <li>ช่องที่ความมั่นใจ <b>ต่ำกว่า threshold</b> → Matched +0.5, Score +0.5 ไม่ว่าตรงหรือไม่ตรง
+              (โมเดลไม่มั่นใจ ไม่ควรตัดกลุ่มนั้นทิ้ง)</li>
+          <li>ช่องที่ไม่ตรงและมั่นใจ → ได้ 0 ทั้งคู่</li>
+          <li>Matched และ Score เท่ากันหมด → เรียงตาม Code</li>
+        </ul>
+      </details>
+
+      <div id="test-traits" class="grid"></div>
+      <div class="grid">
+        <label>Confidence threshold
+          <input type="number" id="test-conf-th" step="0.05" min="0" max="1" value="0.6">
+          <span class="hint">ต่ำกว่าค่านี้ถือว่า “ไม่มั่นใจ” ระบบจะให้ครึ่งคะแนนแทน (ค่าจริงในระบบ = 0.6)</span>
+        </label>
+      </div>
+      <button id="run-test-btn" class="primary">คำนวณ</button>
+    </div>
+
+    <div class="table-wrap">
+      <table id="test-table" class="hidden">
+        <thead>
+          <tr><th>#</th><th>Code</th><th>ชื่อกลุ่ม</th><th>Matched</th><th>Score</th></tr>
+        </thead>
+        <tbody id="test-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ── Rule editor ───────────────────────────────────────── -->
+<div id="editor-backdrop" class="backdrop hidden">
+  <form id="rule-form" class="card modal">
+    <h2 id="editor-title">เพิ่มกลุ่มใหม่</h2>
+
+    <details class="help">
+      <summary>กฎหนึ่งข้อทำงานยังไง?</summary>
+      <p>
+        หนึ่งกลุ่ม = หนึ่งชุดลักษณะ เวลามีรูปเข้ามา โมเดลจะทายลักษณะ 4 อย่าง
+        (Shape / Apex / Base / Margin) แล้วเทียบกับ<b>ทุกกลุ่ม</b> กลุ่มที่ตรงมากที่สุดคือคำตอบ
+      </p>
+      <p>
+        ถ้ายังไม่มีกลุ่มไหนตรงครบ 4 ช่อง ระบบไม่ทิ้งว่าง — จะเลือกกลุ่มที่ตรงมากที่สุดเท่าที่มี
+        ดังนั้นยิ่งใส่กฎครบ ผลยิ่งแม่น
+      </p>
+    </details>
+
+    <input type="hidden" id="rule-id">
+
+    <div class="grid">
+      <label>Code
+        <input type="text" id="rule-code" placeholder="G1" maxlength="20" required>
+        <span class="hint">รหัสสั้น ๆ ห้ามซ้ำ ใช้อ้างอิงในตารางและผลทดสอบ เช่น G1, G2</span>
+      </label>
+      <label>ชื่อกลุ่ม
+        <input type="text" id="rule-name" placeholder="กลุ่มใบหัวใจ" maxlength="255" required>
+        <span class="hint">ชื่อภาษาไทย — ค่านี้คือสิ่งที่ API ส่งกลับใน <code>prediction.label</code></span>
+      </label>
+    </div>
+
+    <p class="section-note">
+      เลือกช่องละ 1 ค่า ครบทั้ง 4 ช่อง = 1 กฎ ห้ามมีกลุ่มไหนใช้ชุดค่าซ้ำกัน
+      ความเป็นไปได้ทั้งหมดคือ 4 × 4 × 4 × 2 = <b>128 แบบ</b>
+    </p>
+
+    <div id="rule-traits" class="grid"></div>
+
+    <div class="grid">
+      <label class="check">
+        <input type="checkbox" id="rule-active" checked> ใช้งาน
+      </label>
+    </div>
+
+    <p id="editor-error" class="error hidden"></p>
+
+    <div class="modal-actions">
+      <button type="button" id="editor-cancel" class="ghost">ยกเลิก</button>
+      <button type="submit" class="primary" id="editor-submit">บันทึก</button>
+    </div>
+  </form>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>

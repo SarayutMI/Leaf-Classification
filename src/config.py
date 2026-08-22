@@ -41,6 +41,17 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("AWS_ALLOWED_UPLOADED", "AWS_ALLWED_UPLOADED"),
     )
 
+    # ── Admin session (static CRUD page) ──────────────────────────
+    # JWT signed with JWT_SECRET, carried in an HttpOnly cookie. Empty
+    # JWT_SECRET is rejected at startup (see src/main.py) rather than
+    # silently signing every session with a blank key.
+    JWT_SECRET: str = ""
+    JWT_ALGORITHM: str = "HS256"
+    JWT_EXPIRE_MINUTES: int = 480
+    SESSION_COOKIE_NAME: str = "leaf_session"
+    # Set COOKIE_SECURE=true wherever the admin page is served over HTTPS.
+    COOKIE_SECURE: bool = False
+
     # ── Seed user ─────────────────────────────────────────────────
     SEED_USERNAME: str = "admin"
     SEED_PASSWORD: str | None = None

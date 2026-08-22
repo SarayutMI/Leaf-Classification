@@ -22,9 +22,11 @@ def _make_image_bytes():
 def test_success_logs_classification_results():
     with patch("src.classify.router.repository") as mock_db, \
          patch("src.classify.router.service") as mock_leaf, \
+         patch("src.classify.router.rules_service") as mock_rules, \
          patch("src.auth.dependencies.auth_repository") as mock_dep_db:
 
         mock_dep_db.get_token_by_api_key.return_value = {"api_key": VALID_KEY}
+        mock_rules.match_group.return_value = []
         mock_leaf.detect_leaf.return_value = MagicMock()
         mock_leaf.slice_leaf.return_value = {
             "full": MagicMock(), "top": MagicMock(),

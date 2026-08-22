@@ -1,0 +1,262 @@
+/* src/static/style.css — rule-base admin page.
+   Follows src/static/DESIGN.md (Kraken-inspired system).
+   Kraken-Brand / Kraken-Product are proprietary: declared first, with the
+   documented fallbacks behind them, plus a Thai face since group names are
+   Thai. No external font requests — the page must work offline. */
+:root {
+  /* Primary */
+  --purple:        #7132f5;
+  --purple-dark:   #5741d8;
+  --purple-deep:   #5b1ecf;
+  --purple-subtle: rgba(133, 91, 251, 0.16);
+  --near-black:    #101114;
+
+  /* Neutral */
+  --cool-gray:   #686b82;
+  --silver-blue: #9497a9;
+  --white:       #ffffff;
+  --border-gray: #dedee5;
+  --gray-subtle: rgba(148, 151, 169, 0.08);
+
+  /* Semantic */
+  --green:      #149e61;
+  --green-dark: #026b3f;
+  --green-bg:   rgba(20, 158, 97, 0.16);
+  --danger:     #b3261e;
+  --danger-bg:  rgba(179, 38, 30, 0.10);
+
+  /* Elevation */
+  --shadow-subtle: rgba(0, 0, 0, 0.03) 0px 4px 24px;
+  --shadow-micro:  rgba(16, 24, 40, 0.04) 0px 1px 4px;
+
+  --font-display: "Kraken-Brand", "IBM Plex Sans", "Noto Sans Thai", "Sarabun",
+                  Helvetica, Arial, sans-serif;
+  --font-ui: "Kraken-Product", "Helvetica Neue", "Noto Sans Thai", "Sarabun",
+             "Leelawadee UI", Helvetica, Arial, sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  padding: 24px;
+  background: var(--white);
+  color: var(--near-black);
+  font-family: var(--font-ui);
+  font-size: 16px;
+  line-height: 1.38;
+}
+
+.hidden { display: none !important; }
+.muted { color: var(--silver-blue); font-weight: 400; }
+.error { color: var(--danger); margin: 8px 0 0; font-size: 14px; }
+
+h1 {
+  font-family: var(--font-display);
+  font-size: 28px; font-weight: 700; line-height: 1.29;
+  letter-spacing: -0.5px; margin: 0;
+}
+h2 {
+  font-family: var(--font-display);
+  font-size: 22px; font-weight: 700; line-height: 1.2;
+  letter-spacing: -0.5px; margin: 0 0 4px;
+}
+
+/* ── Layout ─────────────────────────────────────────────── */
+.topbar {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 16px; flex-wrap: wrap; margin-bottom: 24px;
+}
+.topbar-right { display: flex; align-items: center; gap: 12px; }
+
+.tabs {
+  display: flex; gap: 4px;
+  border-bottom: 1px solid var(--border-gray);
+  margin-bottom: 20px;
+}
+.tab {
+  background: none; border: none; border-bottom: 2px solid transparent;
+  padding: 10px 16px; cursor: pointer;
+  font: 500 16px/1.38 var(--font-ui); color: var(--silver-blue);
+}
+.tab.active { color: var(--purple); border-bottom-color: var(--purple); border-radius: 0px; font-weight: 600; }
+
+.toolbar { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+
+.card {
+  background: var(--white);
+  border: 1px solid var(--border-gray);
+  border-radius: 16px;
+  box-shadow: var(--shadow-subtle);
+  padding: 24px;
+  margin-bottom: 16px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px;
+  margin: 16px 0;
+}
+
+/* ── Forms ──────────────────────────────────────────────── */
+label { display: block; font-size: 14px; font-weight: 500; color: var(--cool-gray); }
+label.check {
+  display: flex; align-items: center; gap: 8px; align-self: end;
+  color: var(--near-black);
+}
+
+input[type="text"], input[type="password"], input[type="number"], select {
+  width: 100%; margin-top: 6px; padding: 13px 16px;
+  border: 1px solid var(--border-gray); border-radius: 10px;
+  font: 400 16px/1.38 var(--font-ui);
+  color: var(--near-black); background: var(--white);
+}
+select[multiple] { height: 132px; padding: 8px; }
+input:focus, select:focus { outline: 2px solid var(--purple); outline-offset: -1px; }
+
+button {
+  font: 500 16px/1.38 var(--font-ui);
+  border-radius: 12px; padding: 13px 16px; cursor: pointer;
+  border: 1px solid transparent;
+}
+button.primary { background: var(--purple); color: var(--white); border-color: var(--purple); }
+button.primary:hover:not(:disabled) { background: var(--purple-deep); border-color: var(--purple-deep); }
+button.ghost { background: var(--white); color: var(--purple-dark); border-color: var(--purple-dark); }
+button.ghost:hover:not(:disabled) { background: var(--purple-subtle); }
+button.link {
+  background: var(--gray-subtle); color: var(--near-black);
+  border: none; padding: 8px 12px; font-size: 14px;
+}
+button.link:hover:not(:disabled) { background: var(--purple-subtle); color: var(--purple); }
+button.link.danger { color: var(--danger); }
+button.link.danger:hover:not(:disabled) { background: var(--danger-bg); color: var(--danger); }
+button:disabled { opacity: .55; cursor: default; }
+
+/* ── Login ──────────────────────────────────────────────── */
+.login-view { display: flex; justify-content: center; padding-top: 8vh; }
+.login-card { width: 100%; max-width: 380px; }
+.login-card label { margin-bottom: 16px; }
+.login-card button { width: 100%; margin-top: 4px; }
+
+/* ── Table ──────────────────────────────────────────────── */
+.table-wrap {
+  background: var(--white);
+  border: 1px solid var(--border-gray);
+  border-radius: 2rem;
+  box-shadow: var(--shadow-micro);
+  overflow-x: auto;
+}
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th, td {
+  padding: 12px 16px; text-align: left;
+  border-bottom: 1px solid var(--border-gray); white-space: nowrap;
+}
+th {
+  background: var(--gray-subtle);
+  font-weight: 700; font-size: 12px; line-height: 1.33;
+  text-transform: uppercase; letter-spacing: .04em; color: var(--cool-gray);
+}
+tbody tr:last-child td { border-bottom: none; }
+td.wrap { white-space: normal; }
+
+.pill {
+  display: inline-block; padding: 2px 8px; border-radius: 6px;
+  font-size: 12px; font-weight: 500;
+  background: var(--green-bg); color: var(--green-dark);
+}
+.pill.off {
+  background: rgba(104, 107, 130, 0.12); color: #484b5e; border-radius: 8px;
+}
+
+/* ── Modal ──────────────────────────────────────────────── */
+.backdrop {
+  position: fixed; inset: 0; background: rgba(16, 17, 20, .45);
+  display: flex; align-items: flex-start; justify-content: center;
+  padding: 5vh 16px; overflow-y: auto;
+}
+.modal { width: 100%; max-width: 760px; margin: 0; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 24px; }
+
+.flash {
+  padding: 12px 16px; border-radius: 10px;
+  background: var(--green-bg); color: var(--green-dark);
+  font-size: 14px; margin: 0 0 16px;
+}
+.flash.bad { background: var(--danger-bg); color: var(--danger); }
+
+/* ── Hints & inline help ────────────────────────────────── */
+.hint {
+  display: block; margin-top: 6px;
+  font-size: 12px; font-weight: 400; line-height: 1.33;
+  color: var(--silver-blue);
+}
+label.check .hint { flex-basis: 100%; margin-top: 0; }
+
+.section-note {
+  margin: 8px 0 0; padding: 12px 16px;
+  background: var(--gray-subtle); border-radius: 10px;
+  font-size: 14px; color: var(--cool-gray);
+}
+
+code {
+  font-family: "SFMono-Regular", Menlo, Consolas, monospace;
+  font-size: .9em; padding: 1px 5px; border-radius: 6px;
+  background: var(--purple-subtle); color: var(--purple-dark);
+}
+
+.help {
+  margin: 16px 0;
+  border: 1px solid var(--border-gray); border-radius: 10px;
+  background: var(--white);
+}
+.help > summary {
+  cursor: pointer; padding: 12px 16px;
+  font-size: 14px; font-weight: 500; color: var(--purple-dark);
+  list-style: none;
+}
+.help > summary::-webkit-details-marker { display: none; }
+.help > summary::before { content: "ⓘ "; }
+.help[open] > summary { border-bottom: 1px solid var(--border-gray); }
+.help p, .help ul { margin: 12px 16px; font-size: 14px; color: var(--cool-gray); }
+.help ul { padding-left: 20px; }
+.help li { margin-bottom: 6px; }
+.help b { color: var(--near-black); }
+
+/* ── Loading ────────────────────────────────────────────── */
+.spinner {
+  display: inline-block; width: 14px; height: 14px;
+  vertical-align: -2px;
+  border: 2px solid currentColor; border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin .7s linear infinite;
+}
+.spinner.big { width: 28px; height: 28px; border-width: 3px; color: var(--purple); }
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Respect a reduced-motion preference: still a clear busy marker, no spin. */
+@media (prefers-reduced-motion: reduce) {
+  .spinner { animation: none; border-top-color: currentColor; opacity: .5; }
+}
+
+button .spinner { margin-right: 8px; }
+button.busy { cursor: progress; }
+
+.state { padding: 24px; text-align: center; margin: 0; font-size: 14px; }
+#rules-loading { color: var(--cool-gray); }
+
+.boot-view {
+  display: flex; flex-direction: column; align-items: center; gap: 12px;
+  padding-top: 20vh;
+}
+
+/* Nothing behind the overlay should look clickable while a request is open. */
+.table-wrap.loading tbody { opacity: .45; }
+
+/* ── Responsive (DESIGN.md breakpoints) ─────────────────── */
+@media (max-width: 640px) {
+  body { padding: 16px; }
+  .card { padding: 16px; border-radius: 12px; }
+  h1 { font-size: 22px; letter-spacing: normal; }
+}

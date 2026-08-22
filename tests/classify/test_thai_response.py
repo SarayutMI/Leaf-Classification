@@ -19,8 +19,10 @@ def _classify(jpeg_bytes, predictions):
          patch("src.classify.router.service.detect_leaf") as mock_detect, \
          patch("src.classify.router.service.slice_leaf") as mock_slice, \
          patch("src.classify.router.service.predict_all") as mock_predict, \
+         patch("src.classify.router.rules_service") as mock_rules, \
          patch("src.auth.dependencies.auth_repository") as mock_tokens:
         mock_tokens.get_token_by_api_key.return_value = {"api_key": VALID_KEY}
+        mock_rules.match_group.return_value = []
         mock_slice.return_value = {
             "full": object(), "top": object(), "middle": object(), "bottom": object()
         }

@@ -50,8 +50,10 @@ def test_rejects_with_429_once_the_limit_is_reached(jpeg_bytes):
 def test_inflight_is_released_after_a_successful_request(jpeg_bytes):
     with patch("src.classify.router.repository") as mock_repo, \
          patch("src.classify.router.service") as mock_service, \
+         patch("src.classify.router.rules_service") as mock_rules, \
          patch("src.auth.dependencies.auth_repository") as mock_tokens:
         mock_tokens.get_token_by_api_key.return_value = {"api_key": VALID_KEY}
+        mock_rules.match_group.return_value = []
         mock_service.slice_leaf.return_value = {
             "full": object(), "top": object(), "middle": object(), "bottom": object()
         }

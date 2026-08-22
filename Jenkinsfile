@@ -132,7 +132,7 @@ pipeline {
                         # Fail here rather than three stages later with a confusing
                         # symptom: the app refuses to start without a database, and
                         # entrypoint.sh pulls the model weights from S3 before boot.
-                        for key in DB_HOST DB_USER DB_PASSWORD DB_NAME \
+                        for key in DB_HOST DB_USER DB_PASSWORD DB_NAME JWT_SECRET \
                                    S3_BUCKET AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_DEFAULT_REGION; do
                             grep -q "^${key}=." "$WORKSPACE/.env" || { echo "ERROR: missing $key in Vault ($VAULT_ENV/$VAULT_SECRET)"; exit 1; }
                         done

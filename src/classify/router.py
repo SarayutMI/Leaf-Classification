@@ -14,6 +14,7 @@ from src.classify import repository, service, storage
 # names instead of a MagicMock the JSON encoder cannot serialize.
 from src.classify.service import mapping_predict_thai_name
 from src.config import settings
+from src.rules import service as rules_service
 
 router = APIRouter(tags=["classify"])
 logger = logging.getLogger(__name__)
@@ -148,13 +149,30 @@ async def classify(
 
         regions = service.slice_leaf(cropped)
 
+        # Predict feaures with model
         predictions = await loop.run_in_executor(None, service.predict_all, regions)
         shape_label,  shape_conf  = predictions["shape"]
         apex_label,   apex_conf   = predictions["apex"]
         base_label,   base_conf   = predictions["base"]
         margin_label, margin_conf = predictions["margin"]
-
+        
         overall_conf = round((shape_conf + apex_conf + base_conf + margin_conf) / 4, 2)
+
+        # Classify with the decision tree. The rule base lives in MySQL and is
+        # edited from /admin, so a bad rule or a DB blip must not turn a
+        # successful classification into a 500 — degrade to no label instead.
+        try:
+            top_groups = rules_service.match_group(
+                traits={"shape": shape_label, "apex": apex_label,
+                        "base": base_label, "margin": margin_label},
+                # predict_class returns percentages; match_group wants 0-1.
+                probs={"shape": shape_conf / 100, "apex": apex_conf / 100,
+                       "base": base_conf / 100, "margin": margin_conf / 100},
+            )
+            prediction_label = top_groups[0]["name"] if top_groups else None
+        except Exception:
+            logger.exception("Rule matching failed — returning no group label")
+            prediction_label = None
 
         duration = round(time.perf_counter() - started_at, 3)
 
@@ -164,7 +182,7 @@ async def classify(
                 _log, api_key, ip, filename, 200, "success",
                 shape=shape_label, apex=apex_label, base=base_label,
                 margin=margin_label, confidence=overall_conf, duration=duration,
-                prediction_label=None,
+                prediction_label=prediction_label,
             ),
         )
 
@@ -185,7 +203,7 @@ async def classify(
                     "apex_th":   mapping_predict_thai_name("apex",   apex_label),
                     "base_th":   mapping_predict_thai_name("base",   base_label),
                     "margin_th": mapping_predict_thai_name("margin", margin_label),
-                    "prediction": {"label": None, "confidence": overall_conf},
+                    "prediction": {"label": prediction_label, "confidence": overall_conf},
                 },
             },
         )
