@@ -1,11 +1,11 @@
-# routes/health.py
+# src/health/router.py
 import logging
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
-from core import database
-from services import leaf as leaf_svc
+from src.classify import service as leaf_service
+from src.database import get_conn
 
-router = APIRouter()
+router = APIRouter(tags=["health"])
 logger = logging.getLogger(__name__)
 
 
@@ -15,7 +15,7 @@ async def health():
     db_error = None
 
     try:
-        conn = database._get_conn()
+        conn = get_conn()
         try:
             cursor = conn.cursor()
             cursor.execute("SELECT 1")
@@ -29,11 +29,11 @@ async def health():
         logger.exception("Health check DB ping failed")
 
     models_status = {
-        "yolo":   "ok" if leaf_svc.yolo_model   is not None else "not_loaded",
-        "shape":  "ok" if leaf_svc.shape_model  is not None else "not_loaded",
-        "apex":   "ok" if leaf_svc.apex_model   is not None else "not_loaded",
-        "base":   "ok" if leaf_svc.base_model   is not None else "not_loaded",
-        "margin": "ok" if leaf_svc.margin_model is not None else "not_loaded",
+        "yolo":   "ok" if leaf_service.yolo_model   is not None else "not_loaded",
+        "shape":  "ok" if leaf_service.shape_model  is not None else "not_loaded",
+        "apex":   "ok" if leaf_service.apex_model   is not None else "not_loaded",
+        "base":   "ok" if leaf_service.base_model   is not None else "not_loaded",
+        "margin": "ok" if leaf_service.margin_model is not None else "not_loaded",
     }
     models_ok = all(v == "ok" for v in models_status.values())
 

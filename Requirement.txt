@@ -23,6 +23,7 @@ ultralytics==8.4.76
 # ==========================================
 tensorflow==2.20.0
 keras==3.13.2
+openvino==2025.3.0
 
 # ==========================================
 # Numeric
@@ -34,7 +35,8 @@ scikit-learn==1.6.1
 # ==========================================
 # Computer Vision
 # ==========================================
-opencv-python==4.13.0
+# Full build, not headless: ultralytics touches cv2.imshow at import time.
+opencv-python==4.12.0.88
 
 # ==========================================
 # Visualization
@@ -64,3 +66,4 @@ boto3==1.38.35
 # ==========================================
 pytest==8.4.1
 httpx==0.28.1
+pydantic-settings==2.15.0

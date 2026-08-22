@@ -1,5 +1,5 @@
 import pytest
-from core.security import hash_password, verify_password, generate_api_key
+from src.auth.security import hash_password, verify_password, generate_api_key
 
 
 def test_hash_password_returns_string():

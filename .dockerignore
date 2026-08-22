@@ -4,10 +4,12 @@ __pycache__/
 *.py[cod]
 *.pt
 *.keras
+*.tflite
+*_openvino_model/
 *.h5
 .git/
+.pytest_cache/
 docs/
-tests/
 Etc/
 Testset-Shape-Shadow-output/
 "Image for Example"/

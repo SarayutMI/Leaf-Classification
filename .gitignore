@@ -1,6 +1,7 @@
 # Environment
 .env
 .env.*
+!.env.example
 
 # Virtual environment
 .venv/
@@ -15,6 +16,13 @@ __pycache__/
 *.egg-info/
 dist/
 build/
+
+# ML model artifacts (downloaded/converted at runtime by entrypoint.sh)
+*.tflite
+*_openvino_model/
+
+# Test caches
+.pytest_cache/
 
 # Jupyter
 .ipynb_checkpoints/

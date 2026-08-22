@@ -1,21 +1,22 @@
-# seed.py
-import os
+# src/seed.py
 import secrets
-import mysql.connector
-import config
-from core.security import hash_password, generate_api_key
 
-SEED_USERNAME = os.environ.get("SEED_USERNAME", "admin")
-SEED_PASSWORD = os.environ.get("SEED_PASSWORD") or secrets.token_urlsafe(24)
+import mysql.connector
+
+from src.auth.security import generate_api_key, hash_password
+from src.config import settings
+
+SEED_USERNAME = settings.SEED_USERNAME
+SEED_PASSWORD = settings.SEED_PASSWORD or secrets.token_urlsafe(24)
 
 
 def run():
     conn = mysql.connector.connect(
-        host=config.DB_HOST,
-        port=config.DB_PORT,
-        user=config.DB_USER,
-        password=config.DB_PASSWORD,
-        database=config.DB_NAME,
+        host=settings.DB_HOST,
+        port=settings.DB_PORT,
+        user=settings.DB_USER,
+        password=settings.DB_PASSWORD,
+        database=settings.DB_NAME,
     )
     cursor = conn.cursor()
 
@@ -111,6 +112,4 @@ def run():
 
 
 if __name__ == "__main__":
-    from dotenv import load_dotenv
-    load_dotenv()
     run()

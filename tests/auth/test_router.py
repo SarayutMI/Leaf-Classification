@@ -2,7 +2,7 @@ import pytest
 from unittest.mock import patch
 from fastapi.testclient import TestClient
 from fastapi import FastAPI
-from routes.auth import router
+from src.auth.router import router
 
 app = FastAPI()
 app.include_router(router)
@@ -13,8 +13,8 @@ MOCK_API_KEY = "abc123def456abc123def456abc123de"
 
 
 def test_register_new_user_returns_api_key():
-    with patch("routes.auth.database") as mock_db, \
-         patch("routes.auth.security") as mock_sec:
+    with patch("src.auth.service.repository") as mock_db, \
+         patch("src.auth.service.security") as mock_sec:
         mock_db.get_user_by_username.return_value = None
         mock_sec.hash_password.return_value = MOCK_HASHED
         mock_db.create_user.return_value = 1
@@ -31,8 +31,8 @@ def test_register_new_user_returns_api_key():
 
 
 def test_login_existing_user_correct_password():
-    with patch("routes.auth.database") as mock_db, \
-         patch("routes.auth.security") as mock_sec:
+    with patch("src.auth.service.repository") as mock_db, \
+         patch("src.auth.service.security") as mock_sec:
         mock_db.get_user_by_username.return_value = {
             "id": 1, "username": "alice", "password_hash": MOCK_HASHED
         }
@@ -46,8 +46,8 @@ def test_login_existing_user_correct_password():
 
 
 def test_login_existing_user_wrong_password():
-    with patch("routes.auth.database") as mock_db, \
-         patch("routes.auth.security") as mock_sec:
+    with patch("src.auth.service.repository") as mock_db, \
+         patch("src.auth.service.security") as mock_sec:
         mock_db.get_user_by_username.return_value = {
             "id": 1, "username": "alice", "password_hash": MOCK_HASHED
         }
@@ -60,7 +60,7 @@ def test_login_existing_user_wrong_password():
 
 
 def test_db_error_returns_500():
-    with patch("routes.auth.database") as mock_db:
+    with patch("src.auth.service.repository") as mock_db:
         mock_db.get_user_by_username.side_effect = Exception("connection refused")
 
         response = client.post("/api/genToken", json={"username": "alice", "password": "pass123"})

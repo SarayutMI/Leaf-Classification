@@ -1,10 +1,10 @@
-# services/s3.py
+# src/classify/storage.py
 import uuid
 import logging
 import boto3
 import cv2
 import numpy as np
-import config
+from src.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -14,7 +14,7 @@ _client = None
 def _get_client():
     global _client
     if _client is None:
-        _client = boto3.client("s3", region_name=config.AWS_DEFAULT_REGION)
+        _client = boto3.client("s3", region_name=settings.AWS_DEFAULT_REGION)
     return _client
 
 
@@ -33,14 +33,14 @@ def upload_regions(regions: dict, original_filename: str) -> dict[str, str]:
         if not ok or buf is None:
             logger.warning("Failed to encode region '%s' (shape=%s), skipping", region_name, img.shape)
             continue
-        key = f"{config.S3_DATASET_PREFIX}/{region_name}/{filename}"
+        key = f"{settings.S3_DATASET_PREFIX}/{region_name}/{filename}"
         client.put_object(
-            Bucket=config.S3_BUCKET,
+            Bucket=settings.S3_BUCKET,
             Key=key,
             Body=buf.tobytes(),
             ContentType="image/jpeg",
         )
-        urls[region_name] = f"{config.CDN_BASE}/{key}"
+        urls[region_name] = f"{settings.CDN_BASE}/{key}"
         logger.info("Uploaded %s → %s", region_name, urls[region_name])
 
     return urls

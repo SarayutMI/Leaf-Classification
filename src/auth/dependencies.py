@@ -1,7 +1,8 @@
-# core/dependencies.py
+# src/auth/dependencies.py
 import logging
 from fastapi import Header, HTTPException, Request
-from core import database
+from src.auth import repository as auth_repository
+from src.classify import repository as classify_repository
 
 logger = logging.getLogger(__name__)
 
@@ -14,7 +15,7 @@ async def require_api_key(
 
     if not x_api_key:
         try:
-            database.log_api_call(
+            classify_repository.log_api_call(
                 api_key="",
                 ip_address=ip,
                 filename="unknown",
@@ -26,10 +27,10 @@ async def require_api_key(
             logger.exception("Failed to write API log (missing key)")
         raise HTTPException(status_code=401, detail="API key required")
 
-    token = database.get_token_by_api_key(x_api_key)
+    token = auth_repository.get_token_by_api_key(x_api_key)
     if not token:
         try:
-            database.log_api_call(
+            classify_repository.log_api_call(
                 api_key=x_api_key,
                 ip_address=ip,
                 filename="unknown",

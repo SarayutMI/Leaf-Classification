@@ -1,4 +1,4 @@
-# core/security.py
+# src/auth/security.py
 import uuid
 import bcrypt
 

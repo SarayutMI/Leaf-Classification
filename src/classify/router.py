@@ -1,4 +1,4 @@
-# routes/classify.py
+# src/classify/router.py
 import asyncio
 import functools
 import logging
@@ -7,13 +7,11 @@ import cv2
 import numpy as np
 from fastapi import APIRouter, BackgroundTasks, File, UploadFile, Depends, Request
 from fastapi.responses import JSONResponse, RedirectResponse
-from core.dependencies import require_api_key
-from core import database
-from services import leaf as leaf_svc
-from services import s3 as s3_svc
-import config
+from src.auth.dependencies import require_api_key
+from src.classify import repository, service, storage
+from src.config import settings
 
-router = APIRouter()
+router = APIRouter(tags=["classify"])
 logger = logging.getLogger(__name__)
 
 MAX_IMAGE_BYTES = 10 * 1024 * 1024  # 10 MB
@@ -24,7 +22,7 @@ def _log(api_key, ip, filename, http_status, status,
          base=None, margin=None, confidence=None, duration=None,
          prediction_label=None) -> int:
     try:
-        return database.log_api_call(
+        return repository.log_api_call(
             api_key=api_key,
             ip_address=ip,
             filename=filename,
@@ -45,12 +43,15 @@ def _log(api_key, ip, filename, http_status, status,
 
 
 def _upload_and_save(regions: dict, filename: str, log_id: int) -> None:
+    if not settings.AWS_ALLOWED_UPLOADED:
+        logger.info("S3 upload disabled (AWS_ALLOWED_UPLOADED=false) — skipping log_id=%s", log_id)
+        return
     if log_id <= 0:
         logger.warning("Skipping S3 upload — no valid log_id (%s)", log_id)
         return
     try:
-        cdn_urls = s3_svc.upload_regions(regions, filename)
-        database.save_image_dataset(log_id, cdn_urls)
+        cdn_urls = storage.upload_regions(regions, filename)
+        repository.save_image_dataset(log_id, cdn_urls)
     except Exception:
         logger.exception("Background S3 upload failed for log_id=%s", log_id)
 
@@ -104,7 +105,7 @@ async def classify(
                 },
             )
 
-        cropped = await loop.run_in_executor(None, leaf_svc.detect_leaf, img)
+        cropped = await loop.run_in_executor(None, service.detect_leaf, img)
         if cropped is None:
             background_tasks.add_task(_log, api_key, ip, filename, 500, "error", "No leaf found")
             return JSONResponse(
@@ -117,20 +118,13 @@ async def classify(
                 },
             )
 
-        regions = leaf_svc.slice_leaf(cropped)
+        regions = service.slice_leaf(cropped)
 
-        # Run all 4 model predictions in parallel — each uses a different model and region
-        (
-            (shape_label,  shape_conf),
-            (apex_label,   apex_conf),
-            (base_label,   base_conf),
-            (margin_label, margin_conf),
-        ) = await asyncio.gather(
-            loop.run_in_executor(None, leaf_svc.predict_class, leaf_svc.shape_model,  regions["full"],   config.SHAPE_CLASSES),
-            loop.run_in_executor(None, leaf_svc.predict_class, leaf_svc.apex_model,   regions["top"],    config.APEX_CLASSES),
-            loop.run_in_executor(None, leaf_svc.predict_class, leaf_svc.base_model,   regions["bottom"], config.BASE_CLASSES),
-            loop.run_in_executor(None, leaf_svc.predict_class, leaf_svc.margin_model, regions["middle"], config.MARGIN_CLASSES),
-        )
+        predictions = await loop.run_in_executor(None, service.predict_all, regions)
+        shape_label,  shape_conf  = predictions["shape"]
+        apex_label,   apex_conf   = predictions["apex"]
+        base_label,   base_conf   = predictions["base"]
+        margin_label, margin_conf = predictions["margin"]
 
         overall_conf = round((shape_conf + apex_conf + base_conf + margin_conf) / 4, 2)
 

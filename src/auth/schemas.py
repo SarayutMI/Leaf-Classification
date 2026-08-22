@@ -1,4 +1,4 @@
-# schemas/auth.py
+# src/auth/schemas.py
 from pydantic import BaseModel
 
 

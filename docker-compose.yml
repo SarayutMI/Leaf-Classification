@@ -1,23 +1,35 @@
+# Shared service definition. Always combine it with an environment file:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#
+# The published port lives in the override files only — declaring it here
+# too would append a second mapping instead of replacing it.
 services:
 
   app:
-    build: .
-    ports:
-      - "${PORT:-8000}:${PORT:-8000}"
+    build:
+      context: .
+      target: runtime
+    image: "${REGISTRY}leaf-api:${TAG:-local}"
     env_file:
       - .env
     environment:
+      # Fixed inside the container so the override files can map a stable
+      # host port; PORT in .env is only meaningful when running locally
+      # without compose.
+      - PORT=8000
       - YOLO_CONFIG_DIR=/tmp
       - PYTHONUNBUFFERED=1
     volumes:
       - model_leaf:/app/Model-Leaf
       - model_classification:/app/Model_Classification
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:${PORT:-8000}/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 180s
+      start_period: 900s   # first boot converts models (TFLite + OpenVINO) before serving
     restart: unless-stopped
 
 volumes:

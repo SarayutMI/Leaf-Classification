@@ -5,10 +5,58 @@
 ## Overview
 
 
-Please Run Requirement.txt
+## Quick start
 
 ```bash
-pip install -r requirements.txt
+python -m venv .venv && source .venv/bin/activate
+pip install -r Requirement.txt
+cp .env.example .env          # then fill in DB + AWS values
+python -m src.main
+
+# or with Docker (the override file publishes the host port):
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
+pytest tests -q
+```
+
+## Project structure
+
+```
+Leaf-Classification/
+├── src/
+│   ├── main.py               # FastAPI app, lifespan (seed + model load/warmup)
+│   ├── config.py             # Settings (pydantic BaseSettings) -> `settings`
+│   ├── database.py           # MySQL connection pool, get_conn()
+│   ├── seed.py               # CREATE TABLE + first admin user / API key
+│   │
+│   ├── auth/                 # Feature module: authentication
+│   │   ├── router.py         # POST /api/genToken
+│   │   ├── schemas.py        # Request/response models
+│   │   ├── service.py        # get_or_create_api_key()
+│   │   ├── repository.py     # SQL for classify_user / classify_token
+│   │   ├── security.py       # bcrypt hashing, API key generation
+│   │   ├── dependencies.py   # require_api_key (X-API-Key)
+│   │   └── exceptions.py
+│   │
+│   ├── classify/             # Feature module: leaf classification
+│   │   ├── router.py         # POST /api/classify
+│   │   ├── service.py        # YOLO detect, slice, TFLite/Keras predict
+│   │   ├── storage.py        # S3 upload of cropped regions
+│   │   └── repository.py     # SQL for classify_api_logs / image_dataset
+│   │
+│   └── health/router.py      # GET /health (DB + model readiness)
+│
+├── tests/                    # conftest.py + tests/auth, tests/classify
+├── scripts/                  # convert_tflite.py, export_openvino.py
+├── Model-Leaf/               # YOLO weights (runtime volume)
+├── Model_Classification/     # Keras/TFLite classifiers (runtime volume)
+├── .env.example
+├── Requirement.txt
+├── Dockerfile                # base -> test / runtime targets
+├── docker-compose.yml        # shared service (no published port)
+├── docker-compose.dev.yml    # dev override  — host :15780
+├── docker-compose.prod.yml   # prod override — host :16780
+├── Jenkinsfile               # Vault -> build -> test -> deploy -> health check
+└── entrypoint.sh             # fetches/converts models, then `python -m src.main`
 ```
 
 

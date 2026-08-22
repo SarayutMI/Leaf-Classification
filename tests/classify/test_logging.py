@@ -2,7 +2,7 @@ import pytest
 from unittest.mock import patch, MagicMock
 from fastapi.testclient import TestClient
 from fastapi import FastAPI
-from routes.classify import router
+from src.classify.router import router
 
 app = FastAPI()
 app.include_router(router)
@@ -20,9 +20,9 @@ def _make_image_bytes():
 
 
 def test_success_logs_classification_results():
-    with patch("routes.classify.database") as mock_db, \
-         patch("routes.classify.leaf_svc") as mock_leaf, \
-         patch("core.dependencies.database") as mock_dep_db:
+    with patch("src.classify.router.repository") as mock_db, \
+         patch("src.classify.router.service") as mock_leaf, \
+         patch("src.auth.dependencies.auth_repository") as mock_dep_db:
 
         mock_dep_db.get_token_by_api_key.return_value = {"api_key": VALID_KEY}
         mock_leaf.detect_leaf.return_value = MagicMock()
@@ -30,13 +30,12 @@ def test_success_logs_classification_results():
             "full": MagicMock(), "top": MagicMock(),
             "middle": MagicMock(), "bottom": MagicMock()
         }
-        mock_leaf.predict_class.side_effect = [
-            ("Ovate", 90.0), ("Acute", 85.0), ("Cuneate", 80.0), ("Entire", 75.0)
-        ]
-        mock_leaf.shape_model = MagicMock()
-        mock_leaf.apex_model = MagicMock()
-        mock_leaf.base_model = MagicMock()
-        mock_leaf.margin_model = MagicMock()
+        mock_leaf.predict_all.return_value = {
+            "shape":  ("Ovate", 90.0),
+            "apex":   ("Acute", 85.0),
+            "base":   ("Cuneate", 80.0),
+            "margin": ("Entire", 75.0),
+        }
 
         image_bytes = _make_image_bytes()
         response = client.post(
@@ -56,8 +55,8 @@ def test_success_logs_classification_results():
 
 
 def test_invalid_image_logs_error():
-    with patch("routes.classify.database") as mock_db, \
-         patch("core.dependencies.database") as mock_dep_db:
+    with patch("src.classify.router.repository") as mock_db, \
+         patch("src.auth.dependencies.auth_repository") as mock_dep_db:
 
         mock_dep_db.get_token_by_api_key.return_value = {"api_key": VALID_KEY}
 
@@ -76,9 +75,9 @@ def test_invalid_image_logs_error():
 
 
 def test_no_leaf_detected_logs_error():
-    with patch("routes.classify.database") as mock_db, \
-         patch("routes.classify.leaf_svc") as mock_leaf, \
-         patch("core.dependencies.database") as mock_dep_db:
+    with patch("src.classify.router.repository") as mock_db, \
+         patch("src.classify.router.service") as mock_leaf, \
+         patch("src.auth.dependencies.auth_repository") as mock_dep_db:
 
         mock_dep_db.get_token_by_api_key.return_value = {"api_key": VALID_KEY}
         mock_leaf.detect_leaf.return_value = None
@@ -98,9 +97,9 @@ def test_no_leaf_detected_logs_error():
 
 
 def test_exception_response_does_not_expose_error_detail():
-    with patch("routes.classify.database") as mock_db, \
-         patch("routes.classify.leaf_svc") as mock_leaf, \
-         patch("core.dependencies.database") as mock_dep_db:
+    with patch("src.classify.router.repository") as mock_db, \
+         patch("src.classify.router.service") as mock_leaf, \
+         patch("src.auth.dependencies.auth_repository") as mock_dep_db:
 
         mock_dep_db.get_token_by_api_key.return_value = {"api_key": VALID_KEY}
         mock_leaf.detect_leaf.side_effect = RuntimeError("internal model path /secret/path.keras")
