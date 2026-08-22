@@ -23,7 +23,11 @@ services:
     #
     #   661 anon + 180 request = ~841 MB; the rest is cache that keeps the
     #   model files resident instead of re-faulting them on every inference.
-    mem_limit: 1250m
+    #
+    # Measured on dev: at 1g memory.peak pegged at the limit even at
+    # concurrency 1, meaning model pages were being evicted and re-read from
+    # disk. 1500m is the first value with real cache headroom.
+    mem_limit: 1500m
     mem_reservation: 1g
     # Half the box. Detection is ~72% of request time and CPU-bound, so this is
     # the single biggest lever on latency. Leaves 1.0 core for the next project

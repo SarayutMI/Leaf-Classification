@@ -7,10 +7,11 @@ services:
       - APP_ENV=development
       - NUM_THREADS=1
       - MAX_CONCURRENT_CLASSIFY=1
-    # dev loads the identical model set, so the same 661 MB floor applies — a
-    # smaller cap would OOM-kill dev on a request prod survives. Less cache
-    # headroom than prod: slower, which is the right way round.
-    mem_limit: 1g
-    mem_reservation: 768m
+    # Measured: at 1g this container's memory.peak pegged at the limit even at
+    # concurrency 1, so the kernel was evicting the mmap'd model pages and
+    # re-reading them from disk on every inference. 1500m leaves real cache
+    # headroom; the host has ~5.3 GB free, so there is nothing to save here.
+    mem_limit: 1500m
+    mem_reservation: 1g
     # Memory nearly matches prod, CPU does not — dev must lose the race.
-    cpus: 0.25
+    cpus: 0.5
