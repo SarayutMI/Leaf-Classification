@@ -4,7 +4,7 @@ services:
     ports:
       # Loopback only: reached through the host's reverse proxy, never straight
       # off the public interface.
-      - "127.0.0.1:16780:8000"
+      - "127.0.0.1:16870:8000"
     environment:
       - APP_ENV=production
       - NUM_THREADS=1
