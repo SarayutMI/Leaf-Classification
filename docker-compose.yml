@@ -21,6 +21,12 @@ services:
       - PORT=8000
       - YOLO_CONFIG_DIR=/tmp
       - PYTHONUNBUFFERED=1
+    # `host.docker.internal` is a Docker Desktop convenience that does not
+    # exist on Linux, where DB_HOST pointing at it fails to resolve and the
+    # startup seed aborts. host-gateway maps it to the host's bridge address so
+    # the same DB_HOST works on both.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - model_leaf:/app/Model-Leaf
       - model_classification:/app/Model_Classification
