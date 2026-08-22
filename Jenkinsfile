@@ -57,7 +57,7 @@ pipeline {
                             env.COMPOSE_PROJECT   = 'leaf-api'
                             env.VAULT_ENV         = 'prod'
                             env.TAG               = 'latest'
-                            env.API_HEALTH_URL    = 'http://127.0.0.1:16780/health'
+                            env.API_HEALTH_URL    = 'http://127.0.0.1:16870/health'
                             env.SHOULD_DEPLOY     = 'true'
                             break
                         case 'develop':
@@ -65,7 +65,7 @@ pipeline {
                             env.COMPOSE_PROJECT   = 'leaf-api-dev'
                             env.VAULT_ENV         = 'develop'
                             env.TAG               = 'develop'
-                            env.API_HEALTH_URL    = 'http://127.0.0.1:15780/health'
+                            env.API_HEALTH_URL    = 'http://127.0.0.1:15870/health'
                             env.SHOULD_DEPLOY     = 'true'
                             break
                         default:
