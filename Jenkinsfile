@@ -96,7 +96,7 @@ pipeline {
 
         stage('Fetch Secrets from Vault') {
             steps {
-                withCredentials([string(credentialsId: 'vault-token', variable: 'VAULT_TOKEN')]) {
+                withCredentials([string(credentialsId: 'VAULT_TOKEN', variable: 'VAULT_TOKEN')]) {
                     sh '''
                         set -e
                         umask 077   # the env file must stay readable only by jenkins
