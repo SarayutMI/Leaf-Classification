@@ -2,6 +2,15 @@ services:
   app:
     container_name: leaf-api-dev
     ports:
-      - "15780:8000"
+      - "127.0.0.1:15780:8000"
     environment:
       - APP_ENV=development
+      - NUM_THREADS=1
+      - MAX_CONCURRENT_CLASSIFY=1
+    # dev loads the identical model set, so the same 661 MB floor applies — a
+    # smaller cap would OOM-kill dev on a request prod survives. Less cache
+    # headroom than prod: slower, which is the right way round.
+    mem_limit: 1g
+    mem_reservation: 768m
+    # Memory nearly matches prod, CPU does not — dev must lose the race.
+    cpus: 0.25

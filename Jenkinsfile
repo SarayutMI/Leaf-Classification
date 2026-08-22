@@ -163,7 +163,13 @@ pipeline {
                         -t "leaf-api-test:${BUILD_NUMBER}" \
                         .
 
-                    docker run --rm "leaf-api-test:${BUILD_NUMBER}" pytest -q tests
+                    # Capped: the suite mocks the models, so it needs almost
+                    # nothing, and this build shares a 2-core host with the
+                    # running prod container. (The image BUILD cannot be capped
+                    # this way — BuildKit rejects --cpus and ignores --memory;
+                    # constrain the builder on the host instead, see README.)
+                    docker run --rm --memory=1g --cpus=1 \
+                        "leaf-api-test:${BUILD_NUMBER}" pytest -q tests
                 '''
             }
             post {

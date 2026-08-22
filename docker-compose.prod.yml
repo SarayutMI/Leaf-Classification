@@ -2,10 +2,30 @@ services:
   app:
     container_name: leaf-api-prod
     ports:
-      - "16780:8000"
+      # Loopback only: reached through the host's reverse proxy, never straight
+      # off the public interface.
+      - "127.0.0.1:16780:8000"
     environment:
       - APP_ENV=production
-    deploy:
-      resources:
-        limits:
-          memory: 2G
+      - NUM_THREADS=1
+      # Paired with mem_limit, not chosen independently: each in-flight request
+      # holds a decoded image, ~180 MB. Raising this means raising mem_limit
+      # with it. It also keeps detect_leaf single-threaded — that call touches
+      # the shared YOLO model with no lock of its own (service.py:172), unlike
+      # predict_all, so 2 would need a lock added there first.
+      - MAX_CONCURRENT_CLASSIFY=1
+    # Measured floor: 661 MB anon (irreclaimable) with all models loaded. The
+    # rest of the container's footprint is page cache for the mmap'd model
+    # files, which the kernel reclaims under pressure instead of OOM-killing.
+    # One request adds ~180 MB — a 24 MP photo decodes to ~72 MB of raw BGR
+    # regardless of file size, plus the 4:3 crop and the region slices
+    # _upload_and_save holds until S3 finishes.
+    #
+    #   661 anon + 180 request = ~841 MB; the rest is cache that keeps the
+    #   model files resident instead of re-faulting them on every inference.
+    mem_limit: 1250m
+    mem_reservation: 1g
+    # Half the box. Detection is ~72% of request time and CPU-bound, so this is
+    # the single biggest lever on latency. Leaves 1.0 core for the next project
+    # plus Jenkins.
+    cpus: 1.0

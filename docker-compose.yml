@@ -24,6 +24,18 @@ services:
     volumes:
       - model_leaf:/app/Model-Leaf
       - model_classification:/app/Model_Classification
+    # json-file with no cap grows until the disk fills. Two 10 MB files is
+    # enough to debug a crash and bounded on a small shared VPS.
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "2"
+
+    pids_limit: 256
+    security_opt:
+      - no-new-privileges:true
+
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s

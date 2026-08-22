@@ -60,6 +60,16 @@ FROM base AS runtime
 COPY entrypoint.sh ./
 RUN chmod +x entrypoint.sh
 
+# Run unprivileged. The model directories are created here and owned by `app`
+# so Docker seeds a NEW named volume with that ownership — entrypoint.sh writes
+# downloaded models into both. A volume that already exists is seeded only
+# once, so a host carrying root-owned model volumes from an earlier build needs
+# them chowned to 10001 before this image will start (see README).
+RUN useradd --create-home --uid 10001 app \
+    && mkdir -p /app/Model-Leaf /app/Model_Classification \
+    && chown -R app:app /app
+USER app
+
 ARG PORT=8000
 ENV PORT=${PORT}
 EXPOSE ${PORT}
