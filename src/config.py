@@ -63,7 +63,7 @@ class Settings(BaseSettings):
     MARGIN_MODEL_PATH: str = "./Model_Classification/R50_Margin_final_V1.keras"
 
     # ── Class labels ─────────────────────────────────────────────
-    SHAPE_CLASSES: list[str] = ["Ovate", "Cordate", "Sagittate", "Lanceolate"]
+    SHAPE_CLASSES: list[str] = ["Cordate", "Lanceolate", "Ovate", "Sagittate"]
     APEX_CLASSES: list[str] = ["Acute", "Caudate", "Cuspidate", "Obtuse"]
     BASE_CLASSES: list[str] = ["Auriculate", "Caudate", "Cuneate", "Obtuse"]
     MARGIN_CLASSES: list[str] = ["Crenate", "Entire"]
