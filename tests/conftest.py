@@ -8,6 +8,14 @@ import pytest
 # Make `src` importable when pytest is run from the repository root.
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+def pytest_configure(config):
+    config.addinivalue_line(
+        "markers",
+        "real_storage: let the test use the real src.classify.storage module "
+        "instead of the stub in tests/classify/conftest.py",
+    )
+
+
 VALID_API_KEY = "abc123def456abc123def456abc123de"
 
 

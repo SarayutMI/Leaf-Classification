@@ -52,17 +52,28 @@ def _log(api_key, ip, filename, http_status, status,
 
 
 def _upload_and_save(regions: dict, filename: str, log_id: int) -> None:
-    if not settings.AWS_ALLOWED_UPLOADED:
-        logger.info("S3 upload disabled (AWS_ALLOWED_UPLOADED=false) — skipping log_id=%s", log_id)
-        return
+    """Persist the region crops and record where they landed.
+
+    With AWS_ALLOWED_UPLOADED=false the regions go to LOCAL_UPLOAD_DIR instead
+    of S3 — they used to be discarded, which silently cost every crop taken on
+    a deployment without bucket credentials. Either way the locations are
+    written to classify_image_dataset, so the caller cannot tell the difference.
+    """
     if log_id <= 0:
-        logger.warning("Skipping S3 upload — no valid log_id (%s)", log_id)
+        logger.warning("Skipping region persistence — no valid log_id (%s)", log_id)
         return
     try:
-        cdn_urls = storage.upload_regions(regions, filename)
-        repository.save_image_dataset(log_id, cdn_urls)
+        if settings.AWS_ALLOWED_UPLOADED:
+            locations = storage.upload_regions(regions, filename)
+        else:
+            locations = storage.save_regions_local(regions, filename)
+            logger.info(
+                "S3 upload disabled (AWS_ALLOWED_UPLOADED=false) — saved %d region(s) "
+                "under %s for log_id=%s", len(locations), settings.LOCAL_UPLOAD_DIR, log_id,
+            )
+        repository.save_image_dataset(log_id, locations)
     except Exception:
-        logger.exception("Background S3 upload failed for log_id=%s", log_id)
+        logger.exception("Background region persistence failed for log_id=%s", log_id)
 
 
 @router.post("/classify", include_in_schema=False)

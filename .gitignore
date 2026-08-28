@@ -30,5 +30,14 @@ build/
 # macOS
 .DS_Store
 
-# Docs / internal plans
-docs/
+# Docs / internal plans. `docs/*` rather than `docs/` so the negation below can
+# apply — git does not descend into an excluded directory, so a `!` rule inside
+# one is never reached.
+docs/*
+!docs/experiments/
+
+*.pt
+*.karas
+
+# Region crops written when AWS_ALLOWED_UPLOADED=false
+uploads/

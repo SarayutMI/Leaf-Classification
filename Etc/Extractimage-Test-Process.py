@@ -85,11 +85,16 @@ def slice_leaf(cropped: np.ndarray, output_dir: Path) -> None:
     """
     Slice the cropped leaf image into 4 parts and save them.
 
-    Slices (based on image height H):
+    Slices (based on image height H). The leaf is framed with the stalk up and
+    the tip down, so the TOP band holds the base and the BOTTOM band the tip —
+    this comment had them the other way round and sent a debugging session after
+    a swap that does not exist. src/classify/service.py feeds `top` to the base
+    head and `bottom` to the apex head, which matches the framing.
+
         Full     → 0 % – 100 %   (full image)
-        Top      → 0 % –  30 %   (leaf tip)
-        Bottom   → 70 % – 100 %  (leaf base)
+        Top      → 0 % –  30 %   (leaf base / stalk end)
         Middle   → 30 % –  60 %  (leaf edge / mid-section)
+        Bottom   → 70 % – 100 %  (leaf tip / apex)
     """
     output_dir.mkdir(parents=True, exist_ok=True)
 

@@ -41,6 +41,11 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("AWS_ALLOWED_UPLOADED", "AWS_ALLWED_UPLOADED"),
     )
 
+    # Where the regions are written when AWS_ALLOWED_UPLOADED=false. The layout
+    # under it mirrors the S3 keys (<S3_DATASET_PREFIX>/<region>/<file>.jpg), so
+    # a local run can be synced to the bucket later as-is.
+    LOCAL_UPLOAD_DIR: str = "./uploads"
+
     # ── Admin token (rule-base API + admin page) ──────────────────
     # JWT signed with JWT_SECRET, sent as `Authorization: Bearer`. Empty
     # JWT_SECRET is rejected at startup (see src/main.py) rather than
@@ -56,7 +61,7 @@ class Settings(BaseSettings):
     # ── Model paths ───────────────────────────────────────────────
     # Accepts a .pt checkpoint or an exported OpenVINO folder
     # (see scripts/export_openvino.py) — ultralytics detects the format.
-    YOLO_MODEL_PATH: str = "./Model-Leaf/yolo11x_leaf.pt"
+    YOLO_MODEL_PATH: str = "./Model-Leaf/yolo11s_leaf.pt"
     SHAPE_MODEL_PATH: str = "./Model_Classification/R50_Shape_final_V0.keras"
     APEX_MODEL_PATH: str = "./Model_Classification/R50_Apex_final_V1.keras"
     BASE_MODEL_PATH: str = "./Model_Classification/R50_Base_final_V1.keras"
@@ -74,6 +79,11 @@ class Settings(BaseSettings):
     # this, not with the uploaded resolution. Must match the imgsz baked into
     # the OpenVINO export (see scripts/export_openvino.py).
     YOLO_IMGSZ: int = 640
+    # Landscape crop, kept on measurement rather than intuition. Portrait (3:4)
+    # frames an upright leaf more tightly, but scored 96.7% against 4:3's 98.3%
+    # on the 241 labelled photos (docs/experiments, scripts/compare_crop_aspect.py).
+    # Raw bbox — what the dataset generator produces — came last at 94.6%, so
+    # expanding the box helps the shape head whichever ratio is used.
     ASPECT_W: int = 4
     ASPECT_H: int = 3
     IMG_SIZE: int = 256

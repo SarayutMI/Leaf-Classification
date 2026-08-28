@@ -4,8 +4,8 @@ set -e
 MODEL_LEAF_DIR="/app/Model-Leaf"
 MODEL_CLASS_DIR="/app/Model_Classification"
 
-# Swap to yolo11n_leaf.pt via env when the new model is ready — no code change needed.
-YOLO_WEIGHTS="${YOLO_WEIGHTS:-yolo11x_leaf.pt}"
+# Override with YOLO_WEIGHTS to swap detectors — no code change needed.
+YOLO_WEIGHTS="${YOLO_WEIGHTS:-yolo11s_leaf.pt}"
 YOLO_NAME="${YOLO_WEIGHTS%.pt}"
 OPENVINO_DIR="$MODEL_LEAF_DIR/${YOLO_NAME}_openvino_model"
 OPENVINO_TAR="${YOLO_NAME}_openvino_model.tar.gz"

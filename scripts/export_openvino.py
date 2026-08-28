@@ -4,9 +4,9 @@ Export a trained YOLO .pt checkpoint to OpenVINO for fast CPU inference.
 
 Run inside the API environment (same deps as the server):
 
-    python scripts/export_openvino.py --model Model-Leaf/yolo11n_leaf.pt
+    python scripts/export_openvino.py --model Model-Leaf/yolo11s_leaf.pt
 
-This produces `Model-Leaf/yolo11n_leaf_openvino_model/` — point
+This produces `Model-Leaf/yolo11s_leaf_openvino_model/` — point
 YOLO_MODEL_PATH (env or src/config.py) at that folder and restart the API.
 Note: imgsz is fixed at export time; inference must use the same size.
 """

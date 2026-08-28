@@ -5,6 +5,13 @@ These numbers are not arbitrary: main:app.py sliced 0-0.30 / 0.30-0.60 /
 0.70-1.0, and the classifiers were built against those crops. A refactor on
 develop closed the 0.60-0.70 gap, feeding both heads 5% of the leaf they had
 never been trained on. Pin the bounds so that cannot happen silently again.
+
+The 0.30 top bound was in doubt: Etc/Extractimage-Test-Process-Folder.py:134,
+the batch script that produced the dataset, cuts the top band at 0.40 instead.
+Only the top band differs between the two scripts, so only the base head is
+affected, and it was measured — 0.30 scored 87.5% against 0.40's 86.2% over the
+160 labelled base bands (scripts/compare_top_band.py). Close, and 0.30 is the
+side that does not lose, so the bound below stands.
 """
 import numpy as np
 

@@ -8,7 +8,7 @@ MySQL and edited from a built-in admin page.
 
 One request does five things:
 
-1. **Detect** the leaf with YOLO11x and crop it to 4:3 without distortion
+1. **Detect** the leaf with YOLO11s and crop it to 4:3 without distortion
 2. **Slice** the crop into the bands each classifier was trained on
 3. **Classify** shape / apex / base / margin with four independent ResNet50V2 heads
 4. **Match** the four predicted traits against the rule base to name a group
@@ -181,13 +181,13 @@ Classification API Response
 ## Model
 
 ```text
-YOLO11x
+YOLO11s
 ```
 
 Model file:
 
 ```text
-yolo11x_leaf.pt
+yolo11s_leaf.pt
 ```
 
 Target class:
@@ -239,6 +239,12 @@ Target ratio:
 4 : 3
 ```
 
+The ratio was measured, not assumed. Portrait (3:4) frames an upright leaf more
+tightly and was tried, but scored 96.7% against 4:3's 98.3% on the 241 labelled
+photos; the raw bounding box the dataset generator produces came last at 94.6%.
+Expanding the box helps the shape head whichever ratio is used. Re-run the
+comparison with `scripts/compare_crop_aspect.py`.
+
 Example:
 
 ```text
@@ -247,7 +253,7 @@ Original BBox
  │  Leaf   │
  └─────────┘
 
-Expanded Crop Area
+Expanded Crop Area (4:3)
  ┌─────────────────┐
  │                 │
  │      Leaf       │
@@ -307,8 +313,14 @@ Bottom-leaf.jpg
 ```
 
 Each upload is linked to the `classify_api_logs` row through
-`classify_image_dataset`. Set `AWS_ALLOWED_UPLOADED=false` to skip uploading
-entirely — classification still runs.
+`classify_image_dataset`.
+
+Set `AWS_ALLOWED_UPLOADED=false` and the regions are written to
+`LOCAL_UPLOAD_DIR` (default `./uploads`) instead of S3. The layout under it
+mirrors the S3 keys — `<S3_DATASET_PREFIX>/<region>/<file>.jpg` — so a local
+run can be synced to the bucket later as-is, and the local paths land in the
+same `classify_image_dataset.cdn_url` column the CDN URLs use. Either way the
+work happens in the background task and the caller sees no difference.
 
 ---
 
@@ -740,7 +752,8 @@ Everything is read from the environment / `.env` through `src/config.py`. See
 | `SEED_USERNAME` / `SEED_PASSWORD` | `admin` / random | Seeds `classify_user` for `/api/genToken` — **not** the admin login |
 | `DB_HOST` … `DB_NAME` | | MySQL connection |
 | `S3_BUCKET`, `AWS_*` | | Model download + region upload |
-| `AWS_ALLOWED_UPLOADED` | `true` | `false` skips S3 upload of regions |
+| `AWS_ALLOWED_UPLOADED` | `true` | `false` writes regions to `LOCAL_UPLOAD_DIR` instead of S3 |
+| `LOCAL_UPLOAD_DIR` | `./uploads` | Where regions go when `AWS_ALLOWED_UPLOADED=false` |
 | `MAX_CONCURRENT_CLASSIFY` | `4` | Load-shedding threshold |
 | `YOLO_IMGSZ` | `640` | Detection cost scales with this |
 | `NUM_THREADS` | `2` | Match the deploy target's core count |
@@ -828,7 +841,7 @@ OpenCV 4.12
 Scikit-Learn 1.6
 Matplotlib 3.10
 
-YOLO11x (ultralytics 8.4)
+YOLO11s (ultralytics 8.4)
 ResNet50V2
 
 FastAPI 0.136
