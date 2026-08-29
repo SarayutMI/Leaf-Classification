@@ -51,22 +51,30 @@ def _log(api_key, ip, filename, http_status, status,
         return -1
 
 
-def _upload_and_save(regions: dict, filename: str, log_id: int) -> None:
+def _upload_and_save(regions: dict, dataset_filename: str, log_id: int) -> None:
     """Persist the region crops and record where they landed.
 
     With AWS_ALLOWED_UPLOADED=false the regions go to LOCAL_UPLOAD_DIR instead
     of S3 — they used to be discarded, which silently cost every crop taken on
     a deployment without bucket credentials. Either way the locations are
     written to classify_image_dataset, so the caller cannot tell the difference.
+
+    This runs AFTER the response has been sent, and that response already
+    carries the CDN URLs these uploads are heading for (`data.images`). So the
+    URLs are a promise, not a receipt: a client that fetches one immediately can
+    beat the upload to it, and if the upload raises here, the URL stays dead
+    while no classify_image_dataset row is written. A missing object is that
+    failure surfacing, not a bug in the naming — the log line below is where it
+    is recorded.
     """
     if log_id <= 0:
         logger.warning("Skipping region persistence — no valid log_id (%s)", log_id)
         return
     try:
         if settings.AWS_ALLOWED_UPLOADED:
-            locations = storage.upload_regions(regions, filename)
+            locations = storage.upload_regions(regions, dataset_filename)
         else:
-            locations = storage.save_regions_local(regions, filename)
+            locations = storage.save_regions_local(regions, dataset_filename)
             logger.info(
                 "S3 upload disabled (AWS_ALLOWED_UPLOADED=false) — saved %d region(s) "
                 "under %s for log_id=%s", len(locations), settings.LOCAL_UPLOAD_DIR, log_id,
@@ -160,6 +168,13 @@ async def classify(
 
         regions = service.slice_leaf(cropped)
 
+        # Name the region set now, not inside the background upload, so the
+        # response can tell the caller where the crops are going. Local mode
+        # produces container paths rather than addresses, so it reports nothing.
+        dataset_filename = storage.new_dataset_filename(filename)
+        image_urls = (storage.region_urls(dataset_filename, regions)
+                      if settings.AWS_ALLOWED_UPLOADED else None)
+
         # Predict feaures with model
         predictions = await loop.run_in_executor(None, service.predict_all, regions)
         shape_label,  shape_conf  = predictions["shape"]
@@ -199,7 +214,7 @@ async def classify(
             ),
         )
 
-        background_tasks.add_task(_upload_and_save, regions, filename, log_id)
+        background_tasks.add_task(_upload_and_save, regions, dataset_filename, log_id)
 
         return JSONResponse(
             status_code=200,
@@ -216,6 +231,9 @@ async def classify(
                     "apex_th":   mapping_predict_thai_name("apex",   apex_label),
                     "base_th":   mapping_predict_thai_name("base",   base_label),
                     "margin_th": mapping_predict_thai_name("margin", margin_label),
+                    # One CDN URL per segmentation, the same locations
+                    # classify_image_dataset records. null when S3 is disabled.
+                    "images": image_urls,
                     # group_id/code let the caller fetch the group's varieties.
                     "prediction": {
                         "group_id":   best["id"] if best else None,

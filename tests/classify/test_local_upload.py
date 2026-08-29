@@ -40,7 +40,7 @@ def local_dir(tmp_path):
 def test_upload_disabled_writes_every_region_to_the_local_dir(regions, local_dir):
     with patch("src.classify.router.settings.AWS_ALLOWED_UPLOADED", False), \
          patch("src.classify.router.repository") as mock_db:
-        _upload_and_save(regions, "photo.jpg", log_id=7)
+        _upload_and_save(regions, "photo_abc123.jpg", log_id=7)
 
     written = sorted(p.relative_to(local_dir).parts[1] for p in local_dir.rglob("*.jpg"))
     assert written == ["bottom", "full", "middle", "top"]
@@ -57,7 +57,7 @@ def test_saved_files_are_readable_jpegs(regions, local_dir):
 
     with patch("src.classify.router.settings.AWS_ALLOWED_UPLOADED", False), \
          patch("src.classify.router.repository"):
-        _upload_and_save(regions, "photo.jpg", log_id=7)
+        _upload_and_save(regions, "photo_abc123.jpg", log_id=7)
 
     for path in local_dir.rglob("*.jpg"):
         assert cv2.imread(str(path)) is not None
@@ -68,7 +68,7 @@ def test_upload_enabled_uses_s3_and_writes_nothing_locally(regions, local_dir):
          patch("src.classify.router.repository") as mock_db, \
          patch("src.classify.router.storage.upload_regions") as mock_upload:
         mock_upload.return_value = {"full": "https://cdn/full.jpg"}
-        _upload_and_save(regions, "photo.jpg", log_id=7)
+        _upload_and_save(regions, "photo_abc123.jpg", log_id=7)
 
     mock_upload.assert_called_once()
     assert list(local_dir.rglob("*.jpg")) == []
@@ -78,18 +78,24 @@ def test_upload_enabled_uses_s3_and_writes_nothing_locally(regions, local_dir):
 def test_invalid_log_id_persists_nothing(regions, local_dir):
     with patch("src.classify.router.settings.AWS_ALLOWED_UPLOADED", False), \
          patch("src.classify.router.repository") as mock_db:
-        _upload_and_save(regions, "photo.jpg", log_id=-1)
+        _upload_and_save(regions, "photo_abc123.jpg", log_id=-1)
 
     assert list(local_dir.rglob("*.jpg")) == []
     mock_db.save_image_dataset.assert_not_called()
 
 
 def test_traversal_shaped_filename_cannot_escape_the_upload_dir(regions, local_dir):
-    """The uploaded filename reaches the path unmodified apart from
-    sanitising — a name shaped like ../../ must not walk out of tmp_path."""
+    """A name shaped like ../../ must not walk out of tmp_path.
+
+    The sanitising now happens in new_dataset_filename(), which the route calls
+    before the response rather than inside this task — so the guarantee is only
+    real if the two are exercised together, as they are here.
+    """
+    dataset_filename = storage.new_dataset_filename("../../etc/passwd.jpg")
+
     with patch("src.classify.router.settings.AWS_ALLOWED_UPLOADED", False), \
          patch("src.classify.router.repository") as mock_db:
-        _upload_and_save(regions, "../../etc/passwd.jpg", log_id=7)
+        _upload_and_save(regions, dataset_filename, log_id=7)
 
     _, locations = mock_db.save_image_dataset.call_args.args
     for path in locations.values():
@@ -102,4 +108,4 @@ def test_a_storage_failure_does_not_escape_the_background_task(regions, local_di
     with patch("src.classify.router.settings.AWS_ALLOWED_UPLOADED", False), \
          patch("src.classify.router.repository"), \
          patch("src.classify.router.storage.save_regions_local", side_effect=OSError("disk full")):
-        _upload_and_save(regions, "photo.jpg", log_id=7)
+        _upload_and_save(regions, "photo_abc123.jpg", log_id=7)

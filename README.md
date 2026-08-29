@@ -315,12 +315,27 @@ Bottom-leaf.jpg
 Each upload is linked to the `classify_api_logs` row through
 `classify_image_dataset`.
 
+The four CDN URLs also come back to the caller in `data.images` (see
+[Success Response](#success-response)). To make that possible the filename is
+generated at the start of the request by `storage.new_dataset_filename()` rather
+than inside the upload, and all four regions share it — so one leaf's four crops
+can be joined by name. `storage._region_key()` is the single definition of the
+`<prefix>/<region>/<file>.jpg` layout, which is what keeps the URL in the
+response and the object in the bucket from drifting apart.
+
+Because the response is sent first, **those URLs are a promise, not a receipt**:
+a client that fetches one immediately can beat the upload to it, and if the
+upload fails the URL stays dead while no `classify_image_dataset` row is written.
+A 404 there is that failure surfacing — the background task logs it.
+
 Set `AWS_ALLOWED_UPLOADED=false` and the regions are written to
 `LOCAL_UPLOAD_DIR` (default `./uploads`) instead of S3. The layout under it
 mirrors the S3 keys — `<S3_DATASET_PREFIX>/<region>/<file>.jpg` — so a local
 run can be synced to the bucket later as-is, and the local paths land in the
 same `classify_image_dataset.cdn_url` column the CDN URLs use. Either way the
-work happens in the background task and the caller sees no difference.
+work happens in the background task, and the only difference the caller sees is
+`data.images`: those paths are container-local filenames, not addresses, so the
+route reports `null` rather than handing over a link that cannot be fetched.
 
 ---
 
@@ -609,6 +624,12 @@ Requirements:
     "apex_th": "แหลม",
     "base_th": "รูปติ่งหู",
     "margin_th": "เรียบ",
+    "images": {
+      "full":   "https://S3_CDN_URL/datasets/full/leaf_9f3ac1....jpg",
+      "top":    "https://S3_CDN_URL/datasets/top/leaf_9f3ac1....jpg",
+      "middle": "https://S3_CDN_URL/datasets/middle/leaf_9f3ac1....jpg",
+      "bottom": "https://S3_CDN_URL/datasets/bottom/leaf_9f3ac1....jpg"
+    },
     "prediction": {
       "group_id": 1,
       "code": "G1",
@@ -623,6 +644,12 @@ Requirements:
 `code` identify it, so the consumer can fetch that group's varieties. All three
 are `null` when no rule matched. `prediction.confidence` is the mean of the four
 model confidences — it describes the trait predictions, not the group match.
+
+`images` holds one CDN URL per segmentation — the same four locations recorded in
+`classify_image_dataset` for this call, all sharing one filename. It is `null`
+when `AWS_ALLOWED_UPLOADED=false`. The upload is still running when the response
+is sent, so treat a URL as eventually-available rather than immediately
+fetchable; see [Process 3 — Image Storage](#process-3--image-storage).
 
 ## Confidence Rules
 

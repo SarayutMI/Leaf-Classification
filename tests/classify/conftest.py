@@ -19,4 +19,11 @@ def stub_region_storage(request):
         yield
         return
     with patch("src.classify.router.storage") as mock_storage:
+        # The route puts storage.region_urls() straight into the JSON body, so
+        # these two need real values — a MagicMock reaches the encoder and 500s
+        # every route test in this package.
+        mock_storage.new_dataset_filename.return_value = "photo_stub.jpg"
+        mock_storage.region_urls.side_effect = lambda name, regions: {
+            r: f"https://cdn.test/datasets/{r}/{name}" for r in regions
+        }
         yield mock_storage

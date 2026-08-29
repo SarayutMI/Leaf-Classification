@@ -41,3 +41,5 @@ docs/*
 
 # Region crops written when AWS_ALLOWED_UPLOADED=false
 uploads/
+
+docs/
