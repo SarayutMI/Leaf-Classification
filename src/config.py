@@ -46,14 +46,6 @@ class Settings(BaseSettings):
     # a local run can be synced to the bucket later as-is.
     LOCAL_UPLOAD_DIR: str = "./uploads"
 
-    # ── Admin token (rule-base API + admin page) ──────────────────
-    # JWT signed with JWT_SECRET, sent as `Authorization: Bearer`. Empty
-    # JWT_SECRET is rejected at startup (see src/main.py) rather than
-    # silently signing every token with a blank key.
-    JWT_SECRET: str = ""
-    JWT_ALGORITHM: str = "HS256"
-    JWT_EXPIRE_MINUTES: int = 480
-
     # ── Seed user ─────────────────────────────────────────────────
     SEED_USERNAME: str = "admin"
     SEED_PASSWORD: str | None = None

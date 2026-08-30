@@ -1,9 +1,9 @@
 # src/rules/service.py
 """Rule-base scoring: turn four predicted traits into a yam group.
 
-The rule base lives in MySQL (see src/seed.py) and is edited from the admin
-page, so it is read through a short-lived process cache instead of a DB round
-trip per classification.
+The rule base lives in MySQL and is edited from the Laravel admin app, so it is
+read through a short-lived process cache instead of a DB round trip per
+classification. An edit takes effect within CACHE_TTL_SECONDS.
 """
 import logging
 import threading
@@ -15,21 +15,13 @@ logger = logging.getLogger(__name__)
 
 TRAIT_KEYS = ("shape", "apex", "base", "margin")
 
-# Falls back to a reload this often even without an explicit invalidation,
-# so a row edited straight in the database still takes effect.
+# The rule base is edited outside this process, so the cache expires on time
+# rather than on an invalidation call.
 CACHE_TTL_SECONDS = 30.0
 
 _cache: list[dict] | None = None
 _cache_at = 0.0
 _cache_lock = threading.Lock()
-
-
-def invalidate_cache() -> None:
-    """Drop the cached rule base. Called by every write in the router."""
-    global _cache, _cache_at
-    with _cache_lock:
-        _cache = None
-        _cache_at = 0.0
 
 
 def get_rules() -> list[dict]:

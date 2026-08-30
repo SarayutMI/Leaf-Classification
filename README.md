@@ -4,7 +4,7 @@
 
 A FastAPI service that classifies cassava/yam leaf characteristics from a single
 photo, and maps the result to a named leaf group using a rule base stored in
-MySQL and edited from a built-in admin page.
+MySQL and maintained by the Laravel admin app.
 
 One request does five things:
 
@@ -59,7 +59,6 @@ python -m venv .venv && source .venv/bin/activate
 pip install -r Requirement.txt
 cp .env.example .env          # then fill in DB + AWS values
 
-# JWT_SECRET is REQUIRED — the app refuses to start without it
 python -c "import secrets; print(secrets.token_urlsafe(48))"
 
 python -m src.main
@@ -86,18 +85,18 @@ separate migration step and no ORM.
 ```
 Leaf-Classification/
 ├── src/
-│   ├── main.py               # FastAPI app, lifespan (seed + model load/warmup), /admin mount
+│   ├── main.py               # FastAPI app, lifespan (seed + model load/warmup)
 │   ├── config.py             # Settings (pydantic BaseSettings) -> `settings`
 │   ├── database.py           # MySQL connection pool, get_conn()
-│   ├── seed.py               # CREATE TABLE + schema migrations + first admin user
+│   ├── seed.py               # CREATE TABLE for the classify_* tables + first API user
 │   │
 │   ├── auth/                 # Feature module: authentication
-│   │   ├── router.py         # POST /api/genToken, /api/admin/{login,logout,me}
+│   │   ├── router.py         # POST /api/genToken
 │   │   ├── schemas.py        # Request models
 │   │   ├── service.py        # get_or_create_api_key()
-│   │   ├── repository.py     # SQL for classify_user / classify_token / users
-│   │   ├── security.py       # bcrypt hashing, API key + JWT bearer tokens
-│   │   ├── dependencies.py   # require_api_key (X-API-Key), require_session (Bearer)
+│   │   ├── repository.py     # SQL for classify_user / classify_token
+│   │   ├── security.py       # bcrypt hashing, API key generation
+│   │   ├── dependencies.py   # require_api_key (X-API-Key)
 │   │   └── exceptions.py
 │   │
 │   ├── classify/             # Feature module: leaf classification
@@ -106,16 +105,9 @@ Leaf-Classification/
 │   │   ├── storage.py        # S3 upload of cropped regions
 │   │   └── repository.py     # SQL for classify_api_logs / image_dataset
 │   │
-│   ├── rules/                # Feature module: the rule base
-│   │   ├── router.py         # /api/rules CRUD + /varieties + /test + /vocab
+│   ├── rules/                # Feature module: the rule base (read-only)
 │   │   ├── service.py        # match_group() + 30s rule cache
-│   │   ├── schemas.py        # Validation against the configured class lists
-│   │   └── repository.py     # SQL for classify_rule_group + varieties
-│   │
-│   ├── static/               # Admin page (no build step, no CDN)
-│   │   ├── index.html        # login + rules CRUD + varieties + scoring test bench
-│   │   ├── app.js
-│   │   └── style.css         # follows DESIGN.md
+│   │   └── repository.py     # SELECT for classify_rule_group
 │   │
 │   └── health/router.py      # GET /health (DB + model readiness), /health/live
 │
@@ -123,7 +115,6 @@ Leaf-Classification/
 ├── scripts/                  # convert_tflite.py, export_openvino.py
 ├── Model-Leaf/               # YOLO weights (runtime volume)
 ├── Model_Classification/     # Keras/TFLite classifiers (runtime volume)
-├── DESIGN.md                 # Design system for the admin page
 ├── .env.example
 ├── Requirement.txt
 ├── Dockerfile                # base -> test / runtime targets
@@ -369,7 +360,8 @@ lists are unchanged either way.
 
 The class lists live in `src/config.py` (`SHAPE_CLASSES`, `APEX_CLASSES`,
 `BASE_CLASSES`, `MARGIN_CLASSES`) and are the single source of truth — the rule
-base validates against them and the admin page builds its dropdowns from them.
+base validates against them (in the Laravel admin app) and the classifiers
+predict them.
 
 Thai names for every class are in `THAI_LABELS` (`src/classify/service.py`) and
 are returned alongside the English ones.
@@ -437,7 +429,6 @@ never rules a group out, and a group matching more traits never loses to one
 matching fewer.
 
 `/api/classify` returns only the winning group's name. The full Top-3 is
-available on the admin test bench.
 
 If the rule base is empty — or a query fails — `prediction.label` comes back
 `null` and the trait predictions are still returned. A rule problem never turns
@@ -461,10 +452,6 @@ Varieties do **not** affect scoring. `/api/classify` returns the matched group's
 varieties still classifies normally. Deleting a group deletes its varieties
 (`ON DELETE CASCADE`).
 
-Managed from the **ชนิดมัน** tab in the admin page. The add form takes **one group
-and any number of names at once**, each with its own active flag; the edit form
-handles a single variety and can move it to another group.
-
 ### Indexed validation
 
 The add form submits many rows, so "a name is invalid" would not be actionable.
@@ -486,14 +473,9 @@ Every validation failure names the row it came from:
 }
 ```
 
-`index` is the position in `items`, or `null` for a form-level field such as
-`group_id`. The admin page paints each message under the input it belongs to.
+`index` is the position in the list, or `null` for a form-level field.
 
-Checked per row: empty name, a name repeated within the same submission, and a
-name already in the database — all matched case-insensitively. A batch is
-all-or-nothing: one bad row and nothing is written.
-
-This shape also covers type errors. `src/main.py` installs a
+This shape covers type errors. `src/main.py` installs a
 `RequestValidationError` handler that rewrites FastAPI's default flat `detail`
 list into the same envelope, turning pydantic's `loc` path into `index` + `field`
 — so **every** 422 from this service now looks like the example above, including
@@ -501,57 +483,18 @@ the ones from `/api/classify`.
 
 ## Caching
 
-The active rule set is cached in-process for 30 seconds and invalidated
-immediately on any write through `/api/rules`, so an edit in the admin page
-takes effect on the next request.
+The active rule set is cached in-process for 30 seconds. Edits are made in the
+Laravel admin app, so there is nothing here to invalidate the cache — an edit
+takes effect within that window.
 
 ---
 
-# Admin page
+# Editing the rule base
 
-Served from `src/static/` at `/admin/` (`/` and `/admin` both redirect there).
-Plain HTML/CSS/JS — no build step, no CDN, no external fonts.
-
-* **Login** — username/password checked against the platform `users` table
-* **Rules tab** — list, create, edit, delete rules; every trait is a dropdown
-  built from the configured class lists, so a typo is impossible
-* **ชนิดมัน tab** — pick a group, then add as many variety names as you like in
-  one go; bad rows are flagged in place
-* **Test tab** — enter four traits and confidences by hand and see the Top-3
-  with the same `match_group()` the API uses
-
-## Authentication
-
-`POST /api/admin/login` checks `users.username` / `users.password` (Laravel
-bcrypt, `$2y$`) and returns a JWT:
-
-```json
-{"access_token": "…", "token_type": "bearer", "expires_in": 28800,
- "user": {"id": "019ea0de-…", "username": "admin", "name": "Administrator", "role": "admin"}}
-```
-
-Send it as `Authorization: Bearer <token>` — the same token works from the admin
-page and from any other service.
-
-**Only `role = 'admin'` with `is_active = 1` gets a token.** A wrong password, an
-unknown username, a non-admin role and a disabled account all return the same
-401 with the same message, so a caller cannot enumerate admin accounts.
-
-This service **reads** `users` and never writes to it. `/api/genToken` is
-unaffected and still uses `classify_user`.
-
-Every `/api/rules` route is protected at the router level, not per route, so a
-route added later is protected by default. Authenticated responses carry
-`Cache-Control: no-store, private`.
-
-> There is no server-side session, so **logout is client-side only** and a token
-> stays valid until it expires (`JWT_EXPIRE_MINUTES`, 8h by default). There is no
-> revocation. Shorten the lifetime if that matters. The admin page keeps its
-> token in `localStorage`, which any script on the page can read — do not add
-> third-party scripts to `src/static/`.
-
-> In `/docs`, use the **Authorize** button and paste the token from
-> `/api/admin/login`.
+The rule base is **not** edited here. Groups and varieties are managed from the
+Laravel admin app (`/rule-groups`), which owns the schema and writes
+`classify_rule_group` / `classify_rule_variety` directly. This service only reads
+them while classifying, and picks an edit up within `CACHE_TTL_SECONDS` (30s).
 
 ---
 
@@ -562,21 +505,6 @@ route added later is protected by default. Authenticated responses carry
 | POST | `/api/genToken` | none | Issue/return an API key (registers unknown users) |
 | POST | `/api/classify` | `X-API-Key` | Classify one leaf image |
 | POST | `/classify` | — | Legacy alias, 308 redirect to `/api/classify` |
-| POST | `/api/admin/login` | none | Exchange credentials for a Bearer token |
-| POST | `/api/admin/logout` | none | No-op — the client discards its token |
-| GET | `/api/admin/me` | Bearer | Identity carried by the token |
-| GET | `/api/rules` | Bearer | List rule groups (with a variety count) |
-| POST | `/api/rules` | Bearer | Create a rule group |
-| GET | `/api/rules/{id}` | Bearer | One rule group |
-| PUT | `/api/rules/{id}` | Bearer | Update a rule group |
-| DELETE | `/api/rules/{id}` | Bearer | Delete a rule group |
-| GET | `/api/rules/varieties` | Bearer | List varieties |
-| POST | `/api/rules/varieties` | Bearer | Create several varieties in one group |
-| GET | `/api/rules/varieties/{id}` | Bearer | One variety |
-| PUT | `/api/rules/varieties/{id}` | Bearer | Update a variety (name, group, active) |
-| DELETE | `/api/rules/varieties/{id}` | Bearer | Delete a variety |
-| POST | `/api/rules/test` | Bearer | Score a hand-entered prediction (Top-N) |
-| GET | `/api/rules/vocab` | Bearer | The class list per trait |
 | GET | `/health` | none | DB + model readiness (200 / 503) |
 | GET | `/health/live` | none | Liveness only, touches nothing external |
 
@@ -732,38 +660,26 @@ Retry-After: 5
 }
 ```
 
-## Calling the admin API from a terminal
-
-```bash
-TOKEN=$(curl -s -X POST 'http://localhost:15780/api/admin/login' \
-  -H 'Content-Type: application/json' \
-  -d '{"username":"admin","password":"<password>"}' \
-  | python3 -c 'import sys,json; print(json.load(sys.stdin)["data"]["access_token"])')
-
-curl -H "Authorization: Bearer $TOKEN" 'http://localhost:15780/api/rules/varieties'
-```
-
 ---
 
 # Database Schema
 
-All tables are created by `src/seed.py` on startup. Raw SQL over a
-`mysql-connector` pool — no ORM, no alembic.
+The `classify_user` / `classify_token` / `classify_api_logs` /
+`classify_image_dataset` tables are created by `src/seed.py` on startup. Raw SQL
+over a `mysql-connector` pool — no ORM, no alembic.
 
 | Table | Purpose |
 |---|---|
-| `classify_user` | Username + bcrypt hash. Used by both API keys and admin login |
+| `classify_user` | Username + bcrypt hash. Backs `/api/genToken` |
 | `classify_token` | One API key per user |
 | `classify_api_logs` | Every call: key, IP, status, traits, confidence, duration, group |
 | `classify_image_dataset` | CDN URLs of the four uploaded regions per log row |
-| `classify_rule_group` | The rule base — one trait combination per group |
-| `classify_rule_variety` | Named yam varieties, one group each |
-| `users` | **Read-only here.** Laravel-managed; backs the admin login |
+| `classify_rule_group` | **Read-only here.** Laravel-managed rule base — one trait combination per group |
+| `classify_rule_variety` | **Read-only here.** Laravel-managed yam varieties, one group each |
 
-`seed.py` also migrates in place: missing columns are added with
-`_ensure_column`, rules stored under the older child-table layout are folded into
-the trait columns, and the short-lived many-to-many variety link table is folded
-into `group_id` and dropped once empty.
+`seed.py` creates only the `classify_*` tables this service owns and adds missing
+columns with `_ensure_column`. The rule tables belong to the Laravel app's
+migrations.
 
 ---
 
@@ -774,9 +690,7 @@ Everything is read from the environment / `.env` through `src/config.py`. See
 
 | Variable | Default | Notes |
 |---|---|---|
-| `JWT_SECRET` | — | **Required.** The app refuses to start without it |
-| `JWT_EXPIRE_MINUTES` | `480` | Bearer token lifetime; there is no revocation |
-| `SEED_USERNAME` / `SEED_PASSWORD` | `admin` / random | Seeds `classify_user` for `/api/genToken` — **not** the admin login |
+| `SEED_USERNAME` / `SEED_PASSWORD` | `admin` / random | Seeds `classify_user` for `/api/genToken` |
 | `DB_HOST` … `DB_NAME` | | MySQL connection |
 | `S3_BUCKET`, `AWS_*` | | Model download + region upload |
 | `AWS_ALLOWED_UPLOADED` | `true` | `false` writes regions to `LOCAL_UPLOAD_DIR` instead of S3 |
@@ -786,7 +700,7 @@ Everything is read from the environment / `.env` through `src/config.py`. See
 | `NUM_THREADS` | `2` | Match the deploy target's core count |
 
 In CI the values come from Vault; `Jenkinsfile` fails the build early if any
-required key — `JWT_SECRET` included — is missing.
+required key is missing.
 
 ---
 
@@ -872,7 +786,7 @@ YOLO11s (ultralytics 8.4)
 ResNet50V2
 
 FastAPI 0.136
-PyJWT 2.10 + bcrypt 5.0
+bcrypt 5.0
 MySQL (mysql-connector-python 9.3)
 boto3 1.38
 

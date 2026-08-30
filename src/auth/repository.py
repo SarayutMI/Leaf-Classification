@@ -76,28 +76,3 @@ def create_token(user_id: int, api_key: str) -> None:
         cursor.close()
     finally:
         conn.close()
-
-
-def get_admin_user_by_username(username: str) -> dict | None:
-    """Look a login up in the platform's `users` table.
-
-    Separate from get_user_by_username, which serves /api/genToken against this
-    service's own classify_user table. `users` is Laravel-managed and read-only
-    here: `id` is a UUID and `password` is a bcrypt `$2y$` hash.
-
-    Role and is_active are returned rather than filtered in SQL, so the service
-    can tell a disabled admin from a wrong password when logging.
-    """
-    conn = get_conn()
-    try:
-        cursor = conn.cursor(dictionary=True)
-        cursor.execute(
-            "SELECT id, username, name, role, password, is_active "
-            "FROM users WHERE username = %s",
-            (username,),
-        )
-        user = cursor.fetchone()
-        cursor.close()
-        return user
-    finally:
-        conn.close()
