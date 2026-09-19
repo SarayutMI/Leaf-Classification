@@ -10,12 +10,26 @@ YOLO_NAME="${YOLO_WEIGHTS%.pt}"
 OPENVINO_DIR="$MODEL_LEAF_DIR/${YOLO_NAME}_openvino_model"
 OPENVINO_TAR="${YOLO_NAME}_openvino_model.tar.gz"
 
-KERAS_MODELS=(
-    "R50_Shape_final_V0"
-    "R50_Apex_final_V1"
-    "R50_Base_final_V1"
-    "R50_Margin_final_V1"
-)
+# Classifier files come from *_MODEL_PATH (.env), same variables config.py
+# reads — only the file name matters. It is fetched from ml_models/ on S3 and
+# the variable is re-exported to point into $MODEL_CLASS_DIR.
+#   <name>.tflite  download the TFLite file only (required); no .keras needed
+#   <name>.keras   download the .keras (required), then its .tflite or convert
+: "${SHAPE_MODEL_PATH:=R50_Shape_final_V0.keras}"
+: "${APEX_MODEL_PATH:=R50_Apex_final_V1.keras}"
+: "${BASE_MODEL_PATH:=R50_Base_final_V1.keras}"
+: "${MARGIN_MODEL_PATH:=R50_Margin_final_V1.keras}"
+KERAS_MODELS=()
+TFLITE_MODELS=()
+for var in SHAPE_MODEL_PATH APEX_MODEL_PATH BASE_MODEL_PATH MARGIN_MODEL_PATH; do
+    file="$(basename "${!var}")"
+    case "$file" in
+        *.tflite) TFLITE_MODELS+=("${file%.tflite}") ;;
+        *.keras)  KERAS_MODELS+=("${file%.keras}") ;;
+        *) echo "ERROR: $var must end in .keras or .tflite (got '$file')"; exit 1 ;;
+    esac
+    export "$var=$MODEL_CLASS_DIR/$file"
+done
 
 download_if_missing() {
     local dest="$1"
@@ -66,6 +80,9 @@ mkdir -p "$MODEL_LEAF_DIR" "$MODEL_CLASS_DIR"
 download_if_missing "$MODEL_LEAF_DIR/$YOLO_WEIGHTS" "ml_models/$YOLO_WEIGHTS"
 for name in "${KERAS_MODELS[@]}"; do
     download_if_missing "$MODEL_CLASS_DIR/${name}.keras" "ml_models/${name}.keras"
+done
+for name in "${TFLITE_MODELS[@]}"; do
+    download_if_missing "$MODEL_CLASS_DIR/${name}.tflite" "ml_models/${name}.tflite"
 done
 
 # ── 2. Optimized artifacts (download from S3, or convert once & upload) ──

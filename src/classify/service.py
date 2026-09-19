@@ -68,8 +68,14 @@ class TFLiteModel:
 
 def _load_classifier(keras_path: str):
     """Prefer a sibling .tflite file (see scripts/convert_tflite.py);
-    fall back to the original .keras model."""
+    fall back to the original .keras model. The path may also name the
+    .tflite file directly."""
     tflite_path = os.path.splitext(keras_path)[0] + ".tflite"
+    if not os.path.exists(tflite_path) and not os.path.exists(keras_path):
+        # Otherwise Keras reports a missing file as "File format not supported".
+        raise FileNotFoundError(
+            f"Classifier model not found: {keras_path} (cwd: {os.getcwd()})"
+        )
     if os.path.exists(tflite_path):
         try:
             model = TFLiteModel(tflite_path)
