@@ -6,11 +6,17 @@ group name. The combination is UNIQUE, so a prediction can never match two
 different groups exactly. The rows are written by the Laravel admin app; this
 service only reads them while classifying.
 """
+from src.config import settings
 from src.database import get_conn
 
 TRAIT_KEYS = ("shape", "apex", "base", "margin")
 
 _COLUMNS = "id, code, name, shape, apex, base, margin, is_active"
+
+
+def _table(name: str) -> str:
+    db = settings.RULES_DB_NAME.replace("`", "``")
+    return f"`{db}`.{name}"
 
 
 def _row_to_group(row: dict) -> dict:
@@ -22,7 +28,7 @@ def list_groups(active_only: bool = False) -> list[dict]:
     conn = get_conn()
     try:
         cursor = conn.cursor(dictionary=True)
-        sql = f"SELECT {_COLUMNS} FROM classify_rule_group"
+        sql = f"SELECT {_COLUMNS} FROM {_table('classify_rule_group')}"
         if active_only:
             sql += " WHERE is_active = 1"
         sql += " ORDER BY code"

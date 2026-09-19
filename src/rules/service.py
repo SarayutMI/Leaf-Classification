@@ -78,6 +78,7 @@ def match_group(
     for rule in rules:
         matched = 0.0
         score = 0.0
+        hits = []
         for key in TRAIT_KEYS:
             if key in uncertain:
                 matched += 0.5
@@ -85,6 +86,7 @@ def match_group(
             elif _same(traits.get(key), rule.get(key)):
                 matched += 1.0
                 score += float(probs.get(key, 0.0))
+                hits.append(key)
 
         results.append({
             "id": rule["id"],
@@ -92,6 +94,7 @@ def match_group(
             "name": rule["name"],
             "matched": round(matched, 2),
             "score": round(score, 3),
+            "hits": hits,  # traits that agree with this group
         })
 
     results.sort(key=lambda r: (-r["matched"], -r["score"], r["code"]))

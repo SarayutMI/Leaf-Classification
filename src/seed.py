@@ -27,9 +27,16 @@ def run():
         port=settings.DB_PORT,
         user=settings.DB_USER,
         password=settings.DB_PASSWORD,
-        database=settings.DB_NAME,
     )
     cursor = conn.cursor()
+
+    # Identifiers can't be bound as parameters; backtick-quote and escape.
+    db = "`" + settings.DB_NAME.replace("`", "``") + "`"
+    cursor.execute(
+        f"CREATE DATABASE IF NOT EXISTS {db} "
+        "CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
+    )
+    cursor.execute(f"USE {db}")
 
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS classify_user (
@@ -66,6 +73,7 @@ def run():
             confidence    FLOAT        NULL,
             duration      FLOAT        NULL,
             prediction_label VARCHAR(255) NULL,
+            final_confidence FLOAT        NULL,
             called_at     DATETIME     DEFAULT NOW()
         )
     """)
@@ -86,6 +94,7 @@ def run():
     # classify/repository.log_api_call writes both on every call.
     _ensure_column(cursor, "classify_api_logs", "duration", "FLOAT NULL")
     _ensure_column(cursor, "classify_api_logs", "prediction_label", "VARCHAR(255) NULL")
+    _ensure_column(cursor, "classify_api_logs", "final_confidence", "FLOAT NULL")
 
     conn.commit()
     print("Tables created.")

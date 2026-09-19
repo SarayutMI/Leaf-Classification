@@ -27,6 +27,7 @@ def test_success_logs_classification_results():
 
         mock_dep_db.get_token_by_api_key.return_value = {"api_key": VALID_KEY}
         mock_rules.match_group.return_value = []
+        mock_db.log_api_call.return_value = 1
         mock_leaf.detect_leaf.return_value = MagicMock()
         mock_leaf.slice_leaf.return_value = {
             "full": MagicMock(), "top": MagicMock(),

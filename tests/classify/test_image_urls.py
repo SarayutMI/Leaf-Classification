@@ -129,7 +129,7 @@ def test_response_carries_one_image_url_per_segmentation(jpeg_bytes):
 
     # The traits are untouched — existing clients must not break.
     assert data["shape"] == "Cordate"
-    assert data["prediction"]["confidence"] == 82.5
+    assert data["confidence"]["overall"] == 82.5
 
 
 def test_local_mode_reports_no_urls(jpeg_bytes):

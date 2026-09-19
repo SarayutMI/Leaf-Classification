@@ -7,6 +7,7 @@ import cv2
 import numpy as np
 from fastapi import APIRouter, BackgroundTasks, File, UploadFile, Depends, Request
 from fastapi.responses import JSONResponse, RedirectResponse
+from pydantic import BaseModel, Field, ValidationInfo, field_validator
 from src.auth.dependencies import require_api_key
 from src.classify import repository, service, storage
 # Bound directly rather than reached through `service`: it is a pure lookup with
@@ -184,24 +185,6 @@ async def classify(
         
         overall_conf = round((shape_conf + apex_conf + base_conf + margin_conf) / 4, 2)
 
-        # Classify with the decision tree. The rule base lives in MySQL and is
-        # edited from /admin, so a bad rule or a DB blip must not turn a
-        # successful classification into a 500 — degrade to no label instead.
-        try:
-            top_groups = rules_service.match_group(
-                traits={"shape": shape_label, "apex": apex_label,
-                        "base": base_label, "margin": margin_label},
-                # predict_class returns percentages; match_group wants 0-1.
-                probs={"shape": shape_conf / 100, "apex": apex_conf / 100,
-                       "base": base_conf / 100, "margin": margin_conf / 100},
-            )
-            best = top_groups[0] if top_groups else None
-        except Exception:
-            logger.exception("Rule matching failed — returning no group label")
-            best = None
-
-        prediction_label = best["name"] if best else None
-
         duration = round(time.perf_counter() - started_at, 3)
 
         log_id = await loop.run_in_executor(
@@ -210,7 +193,6 @@ async def classify(
                 _log, api_key, ip, filename, 200, "success",
                 shape=shape_label, apex=apex_label, base=base_label,
                 margin=margin_label, confidence=overall_conf, duration=duration,
-                prediction_label=prediction_label,
             ),
         )
 
@@ -223,6 +205,8 @@ async def classify(
                 "status": "success",
                 "message": "Image processed successfully",
                 "data": {
+                    # Pass back to /api/decision so the group lands on this log row.
+                    "classify_id": log_id if log_id > 0 else None,
                     "shape":  shape_label,
                     "apex":   apex_label,
                     "base":   base_label,
@@ -234,12 +218,12 @@ async def classify(
                     # One CDN URL per segmentation, the same locations
                     # classify_image_dataset records. null when S3 is disabled.
                     "images": image_urls,
-                    # group_id/code let the caller fetch the group's varieties.
-                    "prediction": {
-                        "group_id":   best["id"] if best else None,
-                        "code":       best["code"] if best else None,
-                        "label":      prediction_label,
-                        "confidence": overall_conf,
+                    "confidence": {
+                        "shape":   shape_conf,
+                        "apex":    apex_conf,
+                        "base":    base_conf,
+                        "margin":  margin_conf,
+                        "overall": overall_conf,
                     },
                 },
             },
@@ -261,3 +245,117 @@ async def classify(
 
     finally:
         _inflight -= 1
+
+
+_TRAIT_CLASSES = {
+    "shape":  settings.SHAPE_CLASSES,
+    "apex":   settings.APEX_CLASSES,
+    "base":   settings.BASE_CLASSES,
+    "margin": settings.MARGIN_CLASSES,
+}
+
+
+class TraitConfidence(BaseModel):
+    """data.confidence from /api/classify, 0-100 per trait."""
+    shape:  float = Field(ge=0, le=100)
+    apex:   float = Field(ge=0, le=100)
+    base:   float = Field(ge=0, le=100)
+    margin: float = Field(ge=0, le=100)
+
+
+class DecisionRequest(BaseModel):
+    classify_id: int | None = None
+    # Omitted = every trait taken as certain (100), e.g. entered by hand.
+    confidence: TraitConfidence | None = None
+    shape: str
+    apex: str
+    base: str
+    margin: str
+
+    @field_validator("shape", "apex", "base", "margin")
+    @classmethod
+    def _known_class(cls, value: str, info: ValidationInfo) -> str:
+        """Accept any casing, return the canonical class name the rules store."""
+        classes = _TRAIT_CLASSES[info.field_name]
+        for name in classes:
+            if name.lower() == value.strip().lower():
+                return name
+        raise ValueError(f"must be one of: {', '.join(classes)}")
+
+
+@router.post("/api/decision")
+async def decision(body: DecisionRequest, api_key: str = Depends(require_api_key)):
+    loop = asyncio.get_running_loop()
+    traits = {k: getattr(body, k) for k in rules_service.TRAIT_KEYS}
+
+    # Same degradation as classify used to have: the rule base is edited from
+    # /admin, so a bad rule or a DB blip returns no group rather than a 500.
+    try:
+        top = await loop.run_in_executor(None, functools.partial(
+            rules_service.match_group,
+            traits=traits,
+            # Labels come from the user, not the model — treat them as certain.
+            probs={k: 1.0 for k in traits},
+            top_n=1,
+        ))
+        best = top[0] if top else None
+    except Exception:
+        logger.exception("Rule matching failed — returning no group label")
+        best = None
+
+    label = best["name"] if best else None
+
+    # Final confidence in the group: each trait that agrees with the group
+    # carries its model confidence, a disagreeing trait carries 0.
+    final_conf = None
+    if best:
+        conf = body.confidence.model_dump() if body.confidence else {k: 100.0 for k in traits}
+        final_conf = round(sum(conf[k] for k in best["hits"]) / len(traits), 2)
+
+    if body.classify_id is not None:
+        try:
+            found = await loop.run_in_executor(
+                None, repository.update_prediction_label, body.classify_id, api_key, label, final_conf,
+            )
+        except Exception:
+            logger.exception("Failed to update prediction_label for classify_id=%s", body.classify_id)
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "code": 500,
+                    "status": "error",
+                    "message": "An internal error occurred. Please try again.",
+                    "errors": {"type": "PROCESSING_ERROR", "details": "Contact support if this persists."},
+                },
+            )
+        if not found:
+            # Unknown id and another key's id look the same, so one caller
+            # cannot probe for another's classifications.
+            return JSONResponse(
+                status_code=404,
+                content={
+                    "code": 404,
+                    "status": "error",
+                    "message": "Classification not found",
+                    "errors": {"type": "NOT_FOUND", "details": f"No classification {body.classify_id} for this API key"},
+                },
+            )
+
+    return JSONResponse(
+        status_code=200,
+        content={
+            "code": 200,
+            "status": "success",
+            "message": "Decision completed",
+            "data": {
+                "classify_id": body.classify_id,
+                "prediction": {
+                    "group_id": best["id"] if best else None,
+                    "code":     best["code"] if best else None,
+                    "label":    label,
+                    "matched":  best["matched"] if best else None,
+                    "confidence": final_conf,
+                },
+            },
+        },
+    )

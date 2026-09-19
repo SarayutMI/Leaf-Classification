@@ -27,6 +27,9 @@ class Settings(BaseSettings):
     DB_USER: str = "root"
     DB_PASSWORD: str = ""
     DB_NAME: str = "leaf_db"
+    # Rule base (classify_rule_group) lives in the Laravel app's schema on the
+    # same MySQL server; DB_USER needs SELECT on it.
+    RULES_DB_NAME: str = "yamwisdom_dev"
 
     # ── AWS / S3 ──────────────────────────────────────────────────
     S3_BUCKET: str = ""

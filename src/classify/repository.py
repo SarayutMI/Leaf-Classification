@@ -52,3 +52,32 @@ def log_api_call(
         return log_id
     finally:
         conn.close()
+
+
+def update_prediction_label(
+    log_id: int, api_key: str, label: str | None, final_confidence: float | None = None,
+) -> bool:
+    """Record the decided group and its final confidence on a classify log row.
+    `confidence` keeps the model's value. False when the row does not exist or
+    belongs to another API key."""
+    conn = get_conn()
+    try:
+        cursor = conn.cursor()
+        # Match on id alone first: MySQL reports 0 affected rows for an UPDATE
+        # that changes nothing, so a repeated decision would look like a 404.
+        cursor.execute(
+            "SELECT 1 FROM classify_api_logs WHERE id = %s AND api_key = %s",
+            (log_id, api_key),
+        )
+        if cursor.fetchone() is None:
+            cursor.close()
+            return False
+        cursor.execute(
+            "UPDATE classify_api_logs SET prediction_label = %s, final_confidence = %s WHERE id = %s",
+            (label, final_confidence, log_id),
+        )
+        conn.commit()
+        cursor.close()
+        return True
+    finally:
+        conn.close()

@@ -395,8 +395,9 @@ module state and are not thread-safe.
 
 # Process 5 — Rule Base
 
-The four predicted traits are matched against a table of rules to produce the
-group name returned in `prediction.label`.
+The four traits the user confirms are sent to `POST /api/decision` and matched
+against a table of rules to produce the group name returned in
+`prediction.label`. `/api/classify` no longer runs this step.
 
 ## Data model
 
@@ -428,11 +429,12 @@ Groups are ordered by `matched`, then `score`, then `code`. An unsure model
 never rules a group out, and a group matching more traits never loses to one
 matching fewer.
 
-`/api/classify` returns only the winning group's name. The full Top-3 is
+`/api/decision` passes every trait at probability 1.0 — the labels are the
+user's final answer — so the unsure branch never fires there and ranking is a
+plain count of matching traits. It returns only the winning group.
 
 If the rule base is empty — or a query fails — `prediction.label` comes back
-`null` and the trait predictions are still returned. A rule problem never turns
-a successful classification into a 500.
+`null` with a 200. A rule problem never turns into a 500.
 
 ## Varieties
 
@@ -503,7 +505,8 @@ them while classifying, and picks an edit up within `CACHE_TTL_SECONDS` (30s).
 | Method | Path | Auth | Purpose |
 |---|---|---|---|
 | POST | `/api/genToken` | none | Issue/return an API key (registers unknown users) |
-| POST | `/api/classify` | `X-API-Key` | Classify one leaf image |
+| POST | `/api/classify` | `X-API-Key` | Predict the four traits of one leaf image |
+| POST | `/api/decision` | `X-API-Key` | Map four traits to a rule-base group + final confidence |
 | POST | `/classify` | — | Legacy alias, 308 redirect to `/api/classify` |
 | GET | `/health` | none | DB + model readiness (200 / 503) |
 | GET | `/health/live` | none | Liveness only, touches nothing external |
@@ -544,6 +547,7 @@ Requirements:
   "status": "success",
   "message": "Image processed successfully",
   "data": {
+    "classify_id": 1234,
     "shape": "Cordate",
     "apex": "Acute",
     "base": "Auriculate",
@@ -558,20 +562,24 @@ Requirements:
       "middle": "https://S3_CDN_URL/datasets/middle/leaf_9f3ac1....jpg",
       "bottom": "https://S3_CDN_URL/datasets/bottom/leaf_9f3ac1....jpg"
     },
-    "prediction": {
-      "group_id": 1,
-      "code": "G1",
-      "label": "กลุ่มใบหัวใจ",
-      "confidence": 97.42
+    "confidence": {
+      "shape": 98.1,
+      "apex": 96.4,
+      "base": 97.0,
+      "margin": 98.2,
+      "overall": 97.42
     }
   }
 }
 ```
 
-`prediction.label` is the **name of the matched rule group**; `group_id` and
-`code` identify it, so the consumer can fetch that group's varieties. All three
-are `null` when no rule matched. `prediction.confidence` is the mean of the four
-model confidences — it describes the trait predictions, not the group match.
+Classify returns the model's traits only — **no group**. The caller shows them to
+the user, lets them correct any trait, then sends the final four to
+[`POST /api/decision`](#post-apidecision). `classify_id` is this call's
+`classify_api_logs` row (`null` if the log write failed); pass it to decision so
+the group is recorded on the same row. Pass `confidence` (without `overall`) to
+decision too — it is what the final confidence is computed from.
+`confidence.overall` is the mean of the four model confidences.
 
 `images` holds one CDN URL per segmentation — the same four locations recorded in
 `classify_image_dataset` for this call, all sharing one filename. It is `null`
@@ -599,8 +607,83 @@ NOT:
 { "confidence": 0.955 }
 ```
 
-Internally `match_group()` works on 0–1 probabilities; `src/classify/router.py`
-divides by 100 before calling it. The API contract stays 0–100.
+## POST /api/decision
+
+```http
+POST /api/decision
+Content-Type: application/json
+X-API-Key: <api key>
+```
+
+```json
+{
+  "classify_id": 1234,
+  "shape": "Cordate",
+  "apex": "Acute",
+  "base": "Auriculate",
+  "margin": "Entire",
+  "confidence": {"shape": 98.2, "apex": 91.0, "base": 87.5, "margin": 95.1}
+}
+```
+
+| Field | Required | Values (case-insensitive) |
+|---|---|---|
+| `classify_id` | no | `data.classify_id` from classify |
+| `confidence` | no | `data.confidence` from classify — `shape`/`apex`/`base`/`margin`, each 0–100. Omitted = every trait treated as 100 |
+| `shape` | yes | `SHAPE_CLASSES` — Cordate, Lanceolate, Ovate, Sagittate |
+| `apex` | yes | `APEX_CLASSES` — Acute, Caudate, Cuspidate, Obtuse |
+| `base` | yes | `BASE_CLASSES` — Auriculate, Caudate, Cuneate, Obtuse |
+| `margin` | yes | `MARGIN_CLASSES` — Crenate, Entire |
+
+```json
+{
+  "code": 200,
+  "status": "success",
+  "message": "Decision completed",
+  "data": {
+    "classify_id": 1234,
+    "prediction": {
+      "group_id": 1,
+      "code": "G1",
+      "label": "กลุ่มใบหัวใจ",
+      "matched": 4.0,
+      "confidence": 92.95
+    }
+  }
+}
+```
+
+| `prediction` field | Meaning |
+|---|---|
+| `group_id` / `code` / `label` | Best-matching active group from `classify_rule_group` |
+| `matched` | How many of the four traits agree with that group, 0–4 |
+| `confidence` | Final confidence in that group, 0–100 (see below) |
+
+The traits are treated as certain (they are the user's final answer), so the best
+group is the one matching the most of them — request `confidence` never changes
+which group wins, only the final confidence.
+
+**Final confidence** = mean over all four traits of the classify confidence of
+each trait that agrees with the group, 0 for one that does not:
+
+```text
+all 4 agree       (98.2 + 91.0 + 87.5 + 95.1) / 4 = 92.95   same as classify's overall
+margin disagrees  (98.2 + 91.0 + 87.5 +  0  ) / 4 = 69.17
+no confidence     every trait = 100, so it is matched / 4 × 100
+```
+
+Every `prediction` field is `null` when the rule base is empty or unreachable —
+still a 200.
+
+With `classify_id`, the row's `prediction_label` and `final_confidence` are set
+to `label` and `confidence`; calling again overwrites both. The row's traits and
+`confidence` keep the model's original values from classify.
+
+| Status | `errors.type` | When |
+|---|---|---|
+| 404 | `NOT_FOUND` | `classify_id` does not exist or belongs to another API key |
+| 422 | `VALIDATION_ERROR` | a trait is missing or not a known class; a `confidence` key is missing or outside 0–100 |
+| 500 | `PROCESSING_ERROR` | writing the result to the log row failed |
 
 ## Validation Error
 
@@ -664,18 +747,21 @@ Retry-After: 5
 
 # Database Schema
 
-The `classify_user` / `classify_token` / `classify_api_logs` /
-`classify_image_dataset` tables are created by `src/seed.py` on startup. Raw SQL
-over a `mysql-connector` pool — no ORM, no alembic.
+On startup `src/seed.py` creates the `DB_NAME` database if it does not exist
+(utf8mb4), then the `classify_user` / `classify_token` / `classify_api_logs` /
+`classify_image_dataset` tables in it. `DB_USER` therefore needs `CREATE` on
+`DB_NAME`, plus `SELECT` on `RULES_DB_NAME`. Raw SQL over a `mysql-connector`
+pool — no ORM, no alembic. Changing `DB_NAME` starts an empty database: data is
+not copied from the old one.
 
 | Table | Purpose |
 |---|---|
 | `classify_user` | Username + bcrypt hash. Backs `/api/genToken` |
 | `classify_token` | One API key per user |
-| `classify_api_logs` | Every call: key, IP, status, traits, confidence, duration, group |
+| `classify_api_logs` | Every classify call: key, IP, status, traits, model `confidence`, duration; decision fills `prediction_label` + `final_confidence` |
 | `classify_image_dataset` | CDN URLs of the four uploaded regions per log row |
-| `classify_rule_group` | **Read-only here.** Laravel-managed rule base — one trait combination per group |
-| `classify_rule_variety` | **Read-only here.** Laravel-managed yam varieties, one group each |
+| `classify_rule_group` | **Read-only here.** Laravel-managed rule base — one trait combination per group. Read from `RULES_DB_NAME` (default `yamwisdom_dev`), not `DB_NAME` |
+| `classify_rule_variety` | Laravel-managed yam varieties, one group each. Lives in `RULES_DB_NAME`; not read by this service — the consumer fetches varieties by `group_id` |
 
 `seed.py` creates only the `classify_*` tables this service owns and adds missing
 columns with `_ensure_column`. The rule tables belong to the Laravel app's
@@ -691,7 +777,8 @@ Everything is read from the environment / `.env` through `src/config.py`. See
 | Variable | Default | Notes |
 |---|---|---|
 | `SEED_USERNAME` / `SEED_PASSWORD` | `admin` / random | Seeds `classify_user` for `/api/genToken` |
-| `DB_HOST` … `DB_NAME` | | MySQL connection |
+| `DB_HOST` … `DB_NAME` | `DB_NAME=leaf_db` | MySQL connection; `DB_NAME` is created on startup if missing |
+| `RULES_DB_NAME` | `yamwisdom_dev` | Database holding the Laravel rule tables, on the same MySQL server |
 | `S3_BUCKET`, `AWS_*` | | Model download + region upload |
 | `AWS_ALLOWED_UPLOADED` | `true` | `false` writes regions to `LOCAL_UPLOAD_DIR` instead of S3 |
 | `LOCAL_UPLOAD_DIR` | `./uploads` | Where regions go when `AWS_ALLOWED_UPLOADED=false` |
