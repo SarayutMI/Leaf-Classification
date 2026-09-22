@@ -247,11 +247,28 @@ async def classify(
         _inflight -= 1
 
 
+# The full botanical vocabulary an admin may build a rule from — mirrors
+# yamwisdom server/config/leaf_traits.php. Wider than SHAPE/APEX/BASE/
+# MARGIN_CLASSES, which name only what the models can predict: /api/decision
+# also takes traits keyed in by hand, so it validates against the vocabulary.
 _TRAIT_CLASSES = {
-    "shape":  settings.SHAPE_CLASSES,
-    "apex":   settings.APEX_CLASSES,
-    "base":   settings.BASE_CLASSES,
-    "margin": settings.MARGIN_CLASSES,
+    "shape": [
+        "Subulate", "Acicular", "Linear", "Oblong", "Elliptic", "Lanceolate",
+        "Oblanceolate", "Ovate", "Obovate", "Orbicular", "Deltoid", "Rhomboid",
+        "Cordate", "Reniform", "Spathulate", "Falcate", "Sagittate", "Hastate",
+    ],
+    "apex": [
+        "Acute", "Acuminate", "Cuspidate", "Mucronate", "Aristate", "Caudate",
+        "Cirrate", "Obtuse", "Truncate", "Retuse", "Emarginate", "Obcordate",
+    ],
+    "base": [
+        "Cuneate", "Attenuate", "Oblique", "Obtuse", "Truncate", "Cordate",
+        "Caudate", "Sagittate", "Hastate", "Auriculate", "Peltate", "Perfoliate",
+    ],
+    "margin": [
+        "Entire", "Undulate", "Crenate", "Dentate", "Serrate", "Serrulate",
+        "Erose", "Ciliate", "Lobed", "Cleft", "Parted", "Divided",
+    ],
 }
 
 

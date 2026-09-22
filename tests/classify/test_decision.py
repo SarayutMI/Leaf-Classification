@@ -106,6 +106,16 @@ def test_labels_are_case_insensitive_and_normalized():
     assert mock_match.call_args.kwargs["traits"] == TRAITS
 
 
+def test_non_ml_vocabulary_classes_are_accepted():
+    """Traits keyed in by hand may name any class in leaf_traits.php, not just
+    the four per trait the models predict."""
+    hand = {"shape": "Reniform", "apex": "Mucronate", "base": "Peltate", "margin": "Divided"}
+    response, mock_match, _ = _decide(hand)
+
+    assert response.status_code == 200
+    assert mock_match.call_args.kwargs["traits"] == hand
+
+
 def test_unknown_label_is_a_422():
     response, mock_match, _ = _decide({**TRAITS, "shape": "Round"})
 
